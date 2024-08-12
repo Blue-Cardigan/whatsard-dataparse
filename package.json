@@ -1,0 +1,16 @@
+{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "moduleDirectories": [
+      "node_modules",
+      "src"
+    ]
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.45.1"
+  }
+}

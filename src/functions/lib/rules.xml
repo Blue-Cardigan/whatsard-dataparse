@@ -1,0 +1,50 @@
+Apply the provided rules to update the code to correctly parse xmls. 
+
+#Rules#
+- Each minor-heading is a new debate. Parse debates to contain id, title, type, speaker_ids, and speeches
+- All speeches following a minor-heading are part of the same debate
+- Use the end of the 'id' value in the minor-heading tag as id (/debate/[id]
+- Use the end of each person_id (/person/[id]) to create the speaker_ids list for each debate
+- Use each major-heading as a debate type, which stays the same for each subsequent debate until changed
+-- In the case where major-heading is preceded by oral-heading and followed by a speech, use the speech as the debate type instead
+-- In the case where major-heading is not preceded by oral-heading, and not followed by a minor-heading, use  major-heading as the debate title (as well as type). 
+--- In this case, use the /debate/[id] from the major-heading used as the debate title
+- Store speeches as a jsonb list of objects, with a new object each time the speaker changes. 
+-- In each Speech object, store speakername and speech_text. 
+-- ensure speech_text is a single string by concatenating text in <p> and <phrase> tags within 
+###
+@https://www.theyworkforyou.com/pwdata/scrapedxml/debates/debates2024-07-30a.xml 
+
+###Example speech snippet###
+<speech id="uk.org.publicwhip/debate/2024-07-25c.789.6" speakername="Pat McFadden" type="Start Answer" person_id="uk.org.publicwhip/person/11936" colnum="789" time="" url="">
+<p pid="c789.6/1">
+Yesterday, I met the civil service unions together with the new Parliamentary Secretary, Cabinet Office, my hon. Friend
+<phrase class="honfriend" person_id="uk.org.publicwhip/person/26528" name="Georgia Gould">the Member for Queen’s Park and Maida Vale (Georgia Gould)</phrase>
+. We had a very positive discussion covering a whole range of issues. I made it clear that the days of Government Ministers waging culture wars against civil servants are over. Instead, we want a civil service that is motivated, valued and helps the Government to deliver their priorities. On the specific issue of pay, the Government will have more to say on civil service pay before the summer recess.
+</p>
+</speech>
+###
+
+###Example XML snippet###
+<publicwhip scraperversion="a" latest="yes">
+<major-heading id="uk.org.publicwhip/debate/2024-07-30a.1149.0" nospeaker="true" colnum="1149" time="" url=""> Speaker’s Statement </major-heading>
+<speech id="uk.org.publicwhip/debate/2024-07-30a.1149.1" speakername="Lindsay Hoyle" person_id="uk.org.publicwhip/person/10295" colnum="1149" time="" url="">
+<p pid="a1149.1/1">Before we begin today’s proceedings, I would like to pay tribute to John Tamlyn, the Bar Doorkeeper who retires today after an incredible 36 years. John is a much-loved member of the Doorkeeper team, whose career in the House of Commons began in 1988, first as an attendant to the Sergeant at Arms office and then as Doorkeeper for the last 26 years. In that time, John has led the Speaker’s procession into the Chamber hundreds of times. He is hugely respected and has developed a reputation as a font of all knowledge on Chamber procedures and a reliable source of information for Members—some might say too much at times, John.</p>
+<p pid="a1149.1/2">To the team and those who work with him, John is known for being one of the smartest dressed Doorkeepers who has a fantastic sense of humour. He is an expert on music—especially ’70s disco and ’80s pop, which he does enjoy—and I am told that he is a mean dancer. He is also a keen photographer. I am sure that the whole House will join me in thanking John for his loyal, lengthy service. I wish him a very happy retirement. Thank you, John, for everything.</p>
+</speech>
+<speech id="uk.org.publicwhip/debate/2024-07-30a.1149.2" speakername="Hon. Members:" nospeaker="true" colnum="1149" time="" url="">
+<p pid="a1149.2/1">Hear, hear!</p>
+</speech>
+<major-heading id="uk.org.publicwhip/debate/2024-07-30a.1149.3" nospeaker="true" colnum="1149" time="" url=""> Business before Questions </major-heading>
+<minor-heading id="uk.org.publicwhip/debate/2024-07-30a.1149.4" nospeaker="true" colnum="1149" time="" url=""> Committee of Selection </minor-heading>
+<speech id="uk.org.publicwhip/debate/2024-07-30a.1149.5" nospeaker="true" colnum="1149" time="" url="">
+<p pid="a1149.5/1" class="italic">Ordered,</p>
+<p pid="a1149.5/2" class="indent" pwmotiontext="yes">That Stuart Anderson, Wendy Chamberlain, Samantha Dixon, Chris Elmore, Vicky Foxcroft, Rebecca Harris, Jessica Morden, Jeff Smith and Mark Tami be members of the Committee of Selection until the end of the current Parliament.—(Mark Tami.)</p>
+</speech>
+<oral-heading id="uk.org.publicwhip/debate/2024-07-30a.1149.6" nospeaker="true" colnum="1149" time="" url="">Oral Answers to Questions</oral-heading>
+<major-heading id="uk.org.publicwhip/debate/2024-07-30a.1149.7" nospeaker="true" colnum="1149" time="" url=""> Foreign, Commonwealth and Development Office </major-heading>
+<speech id="uk.org.publicwhip/debate/2024-07-30a.1149.8" nospeaker="true" colnum="1149" time="" url="">
+<p pid="a1149.8/1" class="italic">The Deputy Foreign Secretary was asked—</p>
+</speech>
+...
+###
