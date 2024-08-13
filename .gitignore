@@ -1,3 +1,13 @@
 .env
 *.xml
 /src/functions/lib/gptfutz/
+/node_modules/
+/.vscode/
+/supabase/
+/public/
+/dist/
+/build/
+/coverage/
+/logs/
+/tmp/
+/cache/
