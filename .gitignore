@@ -1,1 +1,3 @@
 .env
+*.xml
+/src/functions/lib/gptfutz/

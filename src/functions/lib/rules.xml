@@ -1,6 +1,4 @@
-Apply the provided rules to update the code to correctly parse xmls. 
-
-#Rules#
+#Rules to parse XML data#
 - Each minor-heading is a new debate. Parse debates to contain id, title, type, speaker_ids, and speeches
 - All speeches following a minor-heading are part of the same debate
 - Use the end of the 'id' value in the minor-heading tag as id (/debate/[id]
