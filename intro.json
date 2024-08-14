@@ -1,0 +1,45 @@
+{
+  "id": "2024-08-13a.0.0",
+  "title": "👋 Welcome to Whatsard",
+  "type": "intro",
+  "speaker_ids": ["thomas-hansard", "emmeline-pankhurst", "lindsay-hoyle", "baroness-betty-boothroyd"],
+  "speeches": [
+    {
+      "speakername": "Thomas Hansard",
+      "content": "**Have you ever desired that Members of Parliament would converse in straightforward English?** \n\n &nbsp; \n\n We render the formal discourse of Parliament into everyday language, allowing you to stay informed about all proceedings.\n\n &nbsp; \n\n Peruse the discussions in the sidebar to access analysis and informal summaries of every debate occurring in the House of Commons, House of Lords, and beyond."
+    },
+    {
+      "speakername": "Emmeline Pankhurst",
+      "content": "Utilize the search bar on the left to effortlessly locate debates, topics, and Members of Parliament, or filter by the type of debate and its date."    },
+    {
+      "speakername": "Lindsay Hoyle",
+      "content": "Should you wish to receive updates via email, you may subscribe to our weekly newsletter"
+    },
+    {
+      "speakername": "Baroness Betty Boothroyd",
+      "content": "Additional features: \n\n &nbsp; \n\n👉 Tap a message to view the precise quote\n\n👉 Tap a name to view the Member of Parliament's profile\n\n👉 Tap a title at the top to access the original debate"
+    }
+  ],
+  "rewritten_speeches": [
+    {
+      "speeches": [
+        {
+          "speakername": "Thomas Hansard",
+          "rewritten_content": "**Ever wished MPs would speak in plain English?**  \n\n &nbsp; \n\n We translate the language of parliament into everyday speak, so you can keep up with everything that's going on. \n\n &nbsp; \n\n Browse the chats in the sidebar to read analysis & casual renditions of every debate taking place in the House of Commons, Lords, and more."
+        },
+        {
+          "speakername": "Emmeline Pankhurst",
+          "content": "Use the searchbar on the left to find debates, topics, and MPs easily, or you can filter by the type of debate and the date it took place."
+        },
+        {
+          "speakername": "Lindsay Hoyle",
+          "rewritten_content": "If you're interested in keeping up via email, you can sign up for our weekly newsletter 👇"
+        },
+        {
+          "speakername": "Baroness Betty Boothroyd",
+          "rewritten_content": "More features: \n\n &nbsp; \n\n👉 Tap a message to see the direct quote\n\n👉 Tap a name to see the MP's profile\n\n👉 Tap a title at the top to go to the original debate"
+        }
+      ]
+    }
+  ]
+}

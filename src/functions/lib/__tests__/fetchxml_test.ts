@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects } from "std/testing/asserts.ts";
-import { fetchXMLData } from "../fetchxml.ts";
+import { fetchXMLData } from "../debates/fetchxml.js";
 
 Deno.test("fetchXMLData fetches XML data successfully", async () => {
   const mockXMLData = '<xml>Some data</xml>';

@@ -1,5 +1,5 @@
 import { assertEquals, assertNotEquals } from "https://deno.land/std@0.190.0/testing/asserts.ts";
-import { processXML } from "../parsexml.ts";
+import { processXML } from "../debates/parsecommons.js";
 
 const xmlSnippet = `
 <publicwhip scraperversion="a" latest="yes">

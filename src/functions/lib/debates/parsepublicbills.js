@@ -1,4 +1,5 @@
 const { DOMParser } = require('xmldom');
+const moment = require('moment');
 
 function processXML(xmlString) {
   const parser = new DOMParser();
@@ -9,11 +10,12 @@ function processXML(xmlString) {
   let currentType = '';
   let lastMajorHeadingId = null;
   let debateCounter = 0;
+  let isFirstMajorHeading = true;
 
   function createDebate(id, title, type) {
     debateCounter++;
     return {
-      id: id || `debate_${debateCounter}`,
+      id: id ? `publicbills${id}` : `publicbills${moment().format('YYYY-MM-DD')}z.${debateCounter}`,
       title,
       type,
       speaker_ids: new Set(),
@@ -21,9 +23,9 @@ function processXML(xmlString) {
     };
   }
 
-  function addSpeech(debate, speakerId, speakerName, content) {
+  function addSpeech(debate, speakerId, speakerName, content, time) {
     if (speakerId) debate.speaker_ids.add(speakerId);
-    debate.speeches.push({ speakername: speakerName, content });
+    debate.speeches.push({ speakername: speakerName, content, time });
   }
 
   function finalizeCurrentDebate() {
@@ -35,39 +37,34 @@ function processXML(xmlString) {
 
   function processNode(node) {
     switch (node.nodeName) {
-      case 'oral-heading':
-        finalizeCurrentDebate();
-        currentType = '';
-        lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `oral_${debateCounter + 1}`;
-        break;
-
       case 'major-heading':
-        if (currentType === '') {
-          currentType = node.textContent.trim();
+        let headingContent = node.textContent.trim();
+        
+        if (isFirstMajorHeading) {
+          currentType = headingContent;
+          isFirstMajorHeading = false;
         } else {
           finalizeCurrentDebate();
-          currentType = node.textContent.trim();
+          lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `major_${debateCounter + 1}`;
+          currentDebate = createDebate(lastMajorHeadingId, headingContent, currentType);
         }
-        lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `major_${debateCounter + 1}`;
         break;
 
       case 'speech':
         if (!currentDebate) {
-          if (currentType === '') {
-            const content = Array.from(node.getElementsByTagName('p'))
-              .map(p => p.textContent.trim())
-              .join('\n');
-            currentDebate = createDebate(lastMajorHeadingId, content, currentType);
-          } else {
-            currentDebate = createDebate(lastMajorHeadingId, currentType, currentType);
-          }
+          const id = lastMajorHeadingId || `speech_${debateCounter + 1}`;
+          const content = Array.from(node.getElementsByTagName('p'))
+            .map(p => p.textContent.trim())
+            .join('\n');
+          currentDebate = createDebate(id, content, currentType);
         }
         const speakerId = node.getAttribute('person_id')?.split('/').pop() || null;
         const speakerName = node.getAttribute('speakername') || null;
         const content = Array.from(node.getElementsByTagName('p'))
           .map(p => p.textContent.trim())
           .join('\n');
-        addSpeech(currentDebate, speakerId, speakerName, content);
+        const time = node.getAttribute('time') || null;
+        addSpeech(currentDebate, speakerId, speakerName, content, time);
         break;
 
       case 'minor-heading':
