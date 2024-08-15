@@ -49,14 +49,9 @@ function processXML(xmlString) {
 
       case 'speech':
         if (!currentDebate) {
-          if (currentType === '') {
-            const content = Array.from(node.getElementsByTagName('p'))
-              .map(p => p.textContent.trim())
-              .join('\n');
-            currentDebate = createDebate(lastMajorHeadingId, content, currentType);
-          } else {
-            currentDebate = createDebate(lastMajorHeadingId, currentType, currentType);
-          }
+          const id = node.getAttribute('id')?.split('/').pop() || `speech_${debateCounter + 1}`;
+          const type = node.getAttribute('type') || 'Unknown';
+          currentDebate = createDebate(id, "No Title", type);
         }
         const speakerId = node.getAttribute('person_id')?.split('/').pop() || null;
         const speakerName = node.getAttribute('speakername') || null;

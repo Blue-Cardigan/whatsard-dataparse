@@ -10,9 +10,7 @@ const categoryOptions = [
   { id: 'commons', name: 'House of Commons' },
   { id: 'westminster', name: 'Westminster Hall' },
   { id: 'lords', name: 'House of Lords' },
-  { id: 'writtenministerialstatements', name: 'Written Statements' },
-  { id: 'writtenanswers', name: 'Written Answers' },
-  { id: 'publicbillcommittee', name: 'Public Bill Committees' },
+  { id: 'publicbills', name: 'Public Bill Committee' },
 ]
 
 function getPromptForCategory(category) {
@@ -27,13 +25,16 @@ function getPromptForCategory(category) {
     Reduce the number of messages if necessary, but ensure all speakers are represented and all data and arguments are preserved. 
     
     Structure your response like this:
-    [
+    {
+      speeches: 
+      [
         {
         "speakername": "text",
         "rewritten_speech": "text",
         },
         ...
-    ]
+      ]
+    }
     ######
     `;
 }
@@ -72,7 +73,7 @@ async function fetchUnprocessedDebates(batchSize, debateType, startDate) {
     return speechesJson.length < 100000;
   });
 
-  console.log(`Fetched ${data.length} debates, ${filteredData.length} within size limit`);
+  console.log(`Fetched ${data.length} debates for ${debateType}, ${filteredData.length} within size limit`);
 
   return filteredData;
 }
@@ -84,6 +85,7 @@ async function prepareBatchFile(debates) {
 
   for (const debate of debates) {
     const { id, title, speeches } = debate;
+    const debateType = id.split('_')[0]; // Extract debate type from id
 
     if (speeches.length === 1 && !speeches[0].speakername) {
       console.log(`Skipping processing for debate ID: ${id} - Single speech with null speakername`);
@@ -227,15 +229,28 @@ async function updateDatabase(results, debateType) {
   }
 }
 
-async function batchProcessDebates(batchSize, debateType, startDate) {
+async function batchProcessDebates(batchSize, debateTypes, startDate) {
   try {
-    const debates = await fetchUnprocessedDebates(batchSize, debateType, startDate);
-    if (debates.length === 0) {
+    const allDebates = [];
+    const debateTypesArray = Array.isArray(debateTypes) ? debateTypes : [debateTypes];
+    const debatesPerType = Math.ceil(batchSize / debateTypesArray.length);
+    const MAX_TOTAL_DEBATES = batchSize; // Set a limit to the total number of debates processed
+
+    for (const debateType of debateTypesArray) {
+      const debates = await fetchUnprocessedDebates(debatesPerType, debateType, startDate);
+      allDebates.push(...debates);
+    }
+
+    if (allDebates.length === 0) {
       console.log('No unprocessed debates found within size limit.');
       return;
     }
     
-    await prepareBatchFile(debates);
+    if (allDebates.length > MAX_TOTAL_DEBATES) {
+      allDebates = allDebates.slice(0, MAX_TOTAL_DEBATES); // Limit the number of debates to the maximum allowed
+    }
+    
+    await prepareBatchFile(allDebates);
     const fileId = await uploadBatchFile();
     const batchId = await createBatch(fileId);
     const completedBatch = await checkBatchStatus(batchId);
@@ -246,7 +261,10 @@ async function batchProcessDebates(batchSize, debateType, startDate) {
         console.error('No valid results retrieved from the batch');
         return;
       }
-      await updateDatabase(results, debateType);
+      for (const result of results) {
+        const debateType = debateTypesArray.find(type => result.custom_id.startsWith(type));
+        await updateDatabase([result], debateType);
+      }
       console.log('Batch processing completed successfully');
     } else {
       console.error('Batch processing failed or expired');
@@ -257,27 +275,38 @@ async function batchProcessDebates(batchSize, debateType, startDate) {
 }
 
 // Parse command line arguments
-const batchSize = parseInt(process.argv[2], 10) || 100; // Default batch size to 100 if not provided
-const debateType = process.argv[3] || 'both'; // Default to 'both' if not provided
-const startDate = process.argv[4] || '2024-01-01'; // Default to '2024-01-01' if not provided
+const args = process.argv.slice(2);
+let batchSize = 100; // Default batch size
+let debateTypes = ['all']; // Default to all debate types
+let startDate = '2024-01-01'; // Default start date
 
-if (isNaN(batchSize) || batchSize <= 0) {
-  console.error('Please provide a valid batch size as the first argument');
-  process.exit(1);
-}
+args.forEach(arg => {
+  if (!isNaN(parseInt(arg))) {
+    batchSize = parseInt(arg);
+  } else if (['commons', 'lords', 'westminster', 'publicbills', 'all'].includes(arg)) {
+    if (debateTypes[0] === 'all') {
+      debateTypes = [arg];
+    } else {
+      debateTypes.push(arg);
+    }
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(arg)) {
+    startDate = arg;
+  }
+});
 
-if (!['commons', 'lords', 'both'].includes(debateType)) {
-  console.error('Invalid debate type. Please use "commons", "lords", or "both"');
+console.log(`Using batch size: ${batchSize}, debate types: ${debateTypes.join(', ')}, start date: ${startDate}`);
+
+// Validation
+if (batchSize <= 0) {
+  console.error('Please provide a valid batch size (positive integer)');
   process.exit(1);
 }
 
 async function main() {
-  if (debateType === 'both') {
-    await batchProcessDebates(batchSize, 'commons', startDate);
-    await batchProcessDebates(batchSize, 'lords', startDate);
-  } else {
-    await batchProcessDebates(batchSize, debateType, startDate);
+  if (debateTypes.includes('all')) {
+    debateTypes = ['commons', 'lords', 'westminster', 'publicbills'];
   }
+  await batchProcessDebates(batchSize, debateTypes, startDate);
 }
 
 main()

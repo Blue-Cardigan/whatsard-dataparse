@@ -3,8 +3,9 @@ const { createClient } = require('@supabase/supabase-js');
 const { processXML: processCommonsXML } = require('./parsecommons');
 const { processXML: processLordsXML } = require('./parselords');
 const { processXML: processWestminsterXML } = require('./parsewestminster');
+const { processXML: processPublicBillXML } = require('./parsepublicbills');
 const { fetchXMLData } = require('./fetchxml');
-const { format, addDays, parse, isAfter } = require('date-fns');
+const { format, addDays, parse, isAfter, isBefore, isValid } = require('date-fns');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
@@ -118,6 +119,9 @@ async function processAndStoreData(xmlString, date, suffix, debateType) {
     case 'westminster':
       processXML = processWestminsterXML;
       break;
+    case 'publicbills':
+      processXML = processPublicBillXML;
+      break;
     default:
       throw new Error(`Invalid debate type: ${debateType}`);
   }
@@ -126,11 +130,47 @@ async function processAndStoreData(xmlString, date, suffix, debateType) {
   console.log(`Data for ${debateType} ${date}${suffix} successfully stored in Supabase`);
 }
 
-async function processDebateType(startDateString, debateType) {
+function parseArguments(args) {
+  const parsedArgs = {
+    debateType: ['commons', 'lords', 'westminster', 'publicbills'],
+    date: format(new Date(), 'yyyy-MM-dd'),
+    endDate: null,
+    suffix: null
+  };
+
+  args.forEach(arg => {
+    const [key, value] = arg.split('=');
+    if (key === 'debateType') {
+      parsedArgs.debateType = value.split(',').filter(type => 
+        ['commons', 'lords', 'westminster', 'publicbills'].includes(type)
+      );
+    } else if (key === 'date' || key === 'endDate') {
+      const dateMatch = value.match(/^(\d{4}-\d{2}-\d{2})([a-d])?$/);
+      if (dateMatch) {
+        const date = parse(dateMatch[1], 'yyyy-MM-dd', new Date());
+        if (isValid(date)) {
+          parsedArgs[key] = dateMatch[1];
+          if (key === 'date' && dateMatch[2]) {
+            parsedArgs.suffix = dateMatch[2];
+          }
+        } else {
+          console.warn(`Invalid date for ${key}: ${value}. Using default or ignoring.`);
+        }
+      } else {
+        console.warn(`Invalid date format for ${key}: ${value}. Using default or ignoring.`);
+      }
+    }
+  });
+
+  return parsedArgs;
+}
+
+async function processDebateType(startDateString, endDateString, debateType, suffix) {
   try {
-    const suffixes = ['a', 'b', 'c', 'd'];
-    const endDate = parse('2024-07-30', 'yyyy-MM-dd', new Date());
-    let currentDate = parse(startDateString, 'yyyy-MM-dd', new Date());
+    const suffixes = suffix ? [suffix] : ['a', 'b', 'c', 'd'];
+    const startDate = parse(startDateString, 'yyyy-MM-dd', new Date());
+    const endDate = endDateString ? parse(endDateString, 'yyyy-MM-dd', new Date()) : startDate;
+    let currentDate = startDate;
 
     while (!isAfter(currentDate, endDate)) {
       const formattedDate = format(currentDate, 'yyyy-MM-dd');
@@ -146,29 +186,37 @@ async function processDebateType(startDateString, debateType) {
       currentDate = addDays(currentDate, 1);
     }
     
-    console.log(`Processing completed for all ${debateType} dates up to 2024-07-30`);
+    console.log(`Processing completed for ${debateType} from ${startDateString} to ${endDateString || startDateString}`);
   } catch (error) {
     console.error(`Error processing ${debateType}:`, error);
   }
 }
 
-async function main(startDateString, debateType) {
-  if (debateType === 'all' || !debateType) {
-    await processDebateType(startDateString, 'commons');
-    await processDebateType(startDateString, 'lords');
-    await processDebateType(startDateString, 'westminster');
+async function main(args) {
+  const { debateType, date, endDate, suffix } = parseArguments(args);
+
+  if (debateType.length === 0) {
+    console.error('No valid debate types specified. Please use "commons", "lords", "westminster", or "publicbills"');
+    process.exit(1);
+  }
+
+  console.log(`Processing debate types: ${debateType.join(', ')}`);
+  console.log(`Starting from date: ${date}`);
+  if (endDate) {
+    console.log(`Ending at date: ${endDate}`);
   } else {
-    await processDebateType(startDateString, debateType);
+    console.log('Processing for a single date');
+  }
+
+  for (const type of debateType) {
+    await processDebateType(date, endDate, type, suffix);
   }
 }
 
-// Check if a date argument is provided
-const dateArg = process.argv[2] || '2024-01-01';
-const debateType = process.argv[3] || 'all';
+// Use process.argv.slice(2) to get command line arguments
+const args = process.argv.slice(2);
 
-if (!['commons', 'lords', 'westminster', 'all'].includes(debateType)) {
-  console.error('Invalid debate type. Please use "commons", "lords", "westminster", or "all"');
+main(args).catch(error => {
+  console.error('An error occurred:', error);
   process.exit(1);
-}
-
-main(dateArg, debateType);
+});
