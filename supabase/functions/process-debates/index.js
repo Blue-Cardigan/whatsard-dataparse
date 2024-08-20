@@ -1,10 +1,20 @@
-import { main } from '../../../src/functions/main'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { validDebateTypes } from './config.js'
+import { processSingleDebateType } from './batchProcessor.js'
 
-export const handler = async (event, context) => {
-  try {
-    const result = await main(event, context)
-    return { statusCode: 200, body: JSON.stringify(result) }
-  } catch (error) {
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) }
+serve(async (req) => {
+  const { debateTypes, startDate, endDate, batchSize } = await req.json()
+
+  const types = debateTypes === 'all' ? validDebateTypes : debateTypes.split(',')
+  const size = parseInt(batchSize) || 128
+
+  for (const debateType of types) {
+    console.log(`Processing ${debateType} from ${startDate || 'earliest'} to ${endDate || 'latest'}`)
+    await processSingleDebateType(debateType, size, startDate, endDate)
   }
-}
+
+  return new Response(
+    JSON.stringify({ message: "Processing completed" }),
+    { headers: { "Content-Type": "application/json" } },
+  )
+})

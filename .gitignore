@@ -1,6 +1,6 @@
 .env
 *.xml
-/src/functions/lib/gptfutz/
+/supabase/functions/process-debates/lib/gptfutz/
 *.jsonl
 /node_modules/
 /.vscode/
