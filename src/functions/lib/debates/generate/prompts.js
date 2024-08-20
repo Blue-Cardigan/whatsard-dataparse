@@ -12,11 +12,13 @@ const categoryOptions = [
       case 'speeches':
         return `
           ###INSTRUCTION###
-          Rewrite these speeches from a UK ${categoryName} debate in the style of Whatsapp messages. Provide your response as JSON with keys for "speakername", and "rewritten_speech". 
+          Rewrite these speeches from a UK ${categoryName} debate in the style of Whatsapp messages. 
+          Keep close to the original meaning to avoid defamation.
           Clarify meaning which has been obfuscated by the original style. 
           Focus on data and key arguments.
           Use British English spelling with some emojis, and markdown formatting for long messages.
-    
+          
+          Provide your response as JSON with keys for "speakername", and "rewritten_speech". 
           Reduce the number of messages if necessary, but ensure all speakers are represented and all data and arguments are preserved. 
           
           Structure your response like this:
@@ -58,6 +60,13 @@ const categoryOptions = [
             International Relations and Diplomacy
             Parliamentary Affairs and Governance
             Education, Culture, and Society
+          #
+          
+          #Tags
+            Should focus on subtopics of the categories and debate points. 
+            Avoid overlapping tags such as "recall petition" and "petition officer"
+            Avoid broad tags like "Parliamentary debate" or "Official Report".
+          #
 
           Structure your response as JSON:
     

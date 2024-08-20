@@ -1,35 +1,19 @@
 const { DOMParser } = require('xmldom');
-const moment = require('moment');
+const createDebateProcessor = require('./debateProcessor');
 
 function processXML(xmlString) {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
   
+  const { createDebate, addSpeech, finalizeDebates } = createDebateProcessor('commons');
   const debates = [];
   let currentDebate = null;
   let currentType = '';
   let lastMajorHeadingId = null;
-  let debateCounter = 0;
-
-  function createDebate(id, title, type) {
-    debateCounter++;
-    return {
-      id: id ? `commons${id}` : `commons${moment().format('YYYY-MM-DD')}z.${debateCounter}`,
-      title,
-      type,
-      speaker_ids: new Set(),
-      speeches: []
-    };
-  }
-
-  function addSpeech(debate, speakerId, speakerName, content, time) {
-    if (speakerId) debate.speaker_ids.add(speakerId);
-    debate.speeches.push({ speakername: speakerName, content, time });
-  }
 
   function finalizeCurrentDebate() {
     if (currentDebate) {
-      debates.push(currentDebate);
+      debates.push(...finalizeDebates([currentDebate]));
       currentDebate = null;
     }
   }
@@ -39,7 +23,7 @@ function processXML(xmlString) {
       case 'oral-heading':
         finalizeCurrentDebate();
         currentType = '';
-        lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `oral_${debateCounter + 1}`;
+        lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `oral_${debates.length + 1}`;
         break;
 
       case 'major-heading':
@@ -51,7 +35,7 @@ function processXML(xmlString) {
           finalizeCurrentDebate();
           currentType = headingContent;
         }
-        lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `major_${debateCounter + 1}`;
+        lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `major_${debates.length + 1}`;
         break;
 
       case 'speech':
@@ -76,7 +60,7 @@ function processXML(xmlString) {
 
       case 'minor-heading':
         finalizeCurrentDebate();
-        const id = node.getAttribute('id')?.split('/').pop() || `minor_${debateCounter + 1}`;
+        const id = node.getAttribute('id')?.split('/').pop() || null;
         const title = node.textContent.trim();
         currentDebate = createDebate(id, title, currentType);
         break;
@@ -90,10 +74,7 @@ function processXML(xmlString) {
   processNode(xmlDoc.documentElement);
   finalizeCurrentDebate();
 
-  return debates.map(debate => ({
-    ...debate,
-    speaker_ids: Array.from(debate.speaker_ids)
-  }));
+  return finalizeDebates(debates);
 }
 
 module.exports = { processXML };

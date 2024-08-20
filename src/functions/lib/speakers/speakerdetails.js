@@ -46,7 +46,7 @@ async function getImageUrl(personId) {
   }
 
   // Return a default image URL if none of the above URLs work
-  return "https://www.theyworkforyou.com/images/unknownlord_large.png";
+  return "https://www.theyworkforyou.com/images/unknownperson_large.png";
 }
 
 async function updateSpeakers() {

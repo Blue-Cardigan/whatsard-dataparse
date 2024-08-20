@@ -1,3 +1,4 @@
+// Double check script before running
 const { prompts } = require('../../utils/prompts.js');
 const OpenAI = require('openai');
 const { createClient } = require('@supabase/supabase-js');

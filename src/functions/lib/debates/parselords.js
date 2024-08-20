@@ -1,35 +1,19 @@
 const { DOMParser } = require('xmldom');
-const moment = require('moment');
+const createDebateProcessor = require('./debateProcessor');
 
 function processXML(xmlString) {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
   
+  const { createDebate, addSpeech, finalizeDebates } = createDebateProcessor('lords');
   const debates = [];
   let currentDebate = null;
   let currentType = '';
   let lastMajorHeadingId = null;
-  let debateCounter = 0;
-
-  function createDebate(id, title, type) {
-    debateCounter++;
-    return {
-      id: id ? `lords${id}` : `lords${moment().format('YYYY-MM-DD')}z.${debateCounter}`,
-      title,
-      type,
-      speaker_ids: new Set(),
-      speeches: []
-    };
-  }
-
-  function addSpeech(debate, speakerId, speakerName, content, time) {
-    if (speakerId) debate.speaker_ids.add(speakerId);
-    debate.speeches.push({ speakername: speakerName, content, time });
-  }
 
   function finalizeCurrentDebate() {
     if (currentDebate) {
-      debates.push(currentDebate);
+      debates.push(...finalizeDebates([currentDebate]));
       currentDebate = null;
     }
   }
@@ -41,22 +25,18 @@ function processXML(xmlString) {
         let headingContent = '';
         let headingType = '';
         
-        // Get the text content of the node, excluding the <i> tag
         headingContent = node.textContent.split('-')[0].trim();
         
-        // Find the <i> tag and get its content
         const italicTag = node.getElementsByTagName('i')[0];
         if (italicTag) {
           headingType = italicTag.textContent.trim();
         }
         
-        // Remove trailing punctuation and whitespace from headingContent
         headingContent = headingContent.replace(/[^\w\s]+$/, '').trim();
         
-        // If no italicized type is found, use the heading content as the type
         currentType = headingType || headingContent;
         
-        lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `major_${debateCounter + 1}`;
+        lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `major_${debates.length + 1}`;
         currentDebate = createDebate(lastMajorHeadingId, headingContent, currentType);
         break;
 
@@ -75,7 +55,7 @@ function processXML(xmlString) {
 
       case 'minor-heading':
         finalizeCurrentDebate();
-        const id = node.getAttribute('id')?.split('/').pop() || `minor_${debateCounter + 1}`;
+        const id = node.getAttribute('id')?.split('/').pop() || `minor_${debates.length + 1}`;
         const title = node.textContent.trim();
         currentDebate = createDebate(id, title, currentType);
         break;
@@ -89,10 +69,7 @@ function processXML(xmlString) {
   processNode(xmlDoc.documentElement);
   finalizeCurrentDebate();
 
-  return debates.map(debate => ({
-    ...debate,
-    speaker_ids: Array.from(debate.speaker_ids)
-  }));
+  return finalizeDebates(debates);
 }
 
 module.exports = { processXML };

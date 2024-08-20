@@ -78,18 +78,18 @@ async function storeDataInSupabase(debates, debateType) {
 
     // Delete existing debates with the same IDs
     const { error: deleteError } = await supabase
-      .from(debateType)
+      .from(debateType)  // Use the correct table name based on debateType
       .delete()
       .in('id', ids);
 
     if (deleteError) {
-      console.error('Error deleting existing debates:', deleteError);
+      console.error(`Error deleting existing debates from ${debateType} table:`, deleteError);
       throw deleteError;
     }
 
     // Insert new debates
     const { error: insertError } = await supabase
-      .from(debateType)
+      .from(debateType)  // Use the correct table name based on debateType
       .insert(chunk.map(debate => ({
         id: debate.id,
         title: debate.title,
@@ -99,12 +99,12 @@ async function storeDataInSupabase(debates, debateType) {
       })));
 
     if (insertError) {
-      console.error('Error inserting new debates:', insertError);
+      console.error(`Error inserting new debates into ${debateType} table:`, insertError);
       throw insertError;
     }
   }
 
-  console.log(`Stored ${validDebates.length} valid debates out of ${debates.length} total debates.`);
+  console.log(`Stored ${validDebates.length} valid debates out of ${debates.length} total debates in ${debateType} table.`);
 }
 
 async function processAndStoreData(xmlString, date, suffix, debateType) {

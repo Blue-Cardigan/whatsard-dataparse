@@ -1,58 +1,18 @@
 const { DOMParser } = require('xmldom');
-const moment = require('moment');
+const createDebateProcessor = require('./debateProcessor');
 
 function processXML(xmlString) {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
   
+  const { createDebate, addSpeech, finalizeDebates, setCommitteeInfo, addDivisionCount, setHasMinorHeading } = createDebateProcessor('publicbills');
   const debates = [];
   let currentDebate = null;
   let currentType = '';
-  let debateCounter = 0;
-  let committeeInfo = null;
-  let divisionCounts = [];
-  let hasMinorHeading = false;
-
-  function createDebate(id, title, type) {
-    debateCounter++;
-    let debateId;
-    if (id) {
-      // Remove text between 'publicbills' and the date
-      const dateMatch = id.match(/\d{4}-\d{2}-\d{2}/);
-      if (dateMatch) {
-        const date = dateMatch[0];
-        const suffix = id.substring(id.indexOf(date) + date.length);
-        debateId = `publicbills${date}${suffix}`;
-      } else {
-        debateId = `publicbills${moment().format('YYYY-MM-DD')}z.${debateCounter}`;
-      }
-    } else {
-      debateId = `publicbills${moment().format('YYYY-MM-DD')}z.${debateCounter}`;
-    }
-    return {
-      id: debateId,
-      title,
-      type,
-      speaker_ids: new Set(),
-      speeches: []
-    };
-  }
-
-  function addSpeech(debate, speakerId, speakerName, content, time) {
-    if (speakerId) debate.speaker_ids.add(speakerId);
-    debate.speeches.push({ speakername: speakerName, content, time });
-  }
 
   function finalizeCurrentDebate() {
     if (currentDebate) {
-      if (committeeInfo) {
-        currentDebate.speeches.unshift(committeeInfo);
-      }
-      if (divisionCounts.length > 0) {
-        currentDebate.speeches.push(...divisionCounts);
-        divisionCounts = []; // Clear division counts for next debate
-      }
-      debates.push(currentDebate);
+      debates.push(...finalizeDebates([currentDebate]));
       currentDebate = null;
     }
   }
@@ -64,7 +24,7 @@ function processXML(xmlString) {
         break;
 
       case 'committee':
-        committeeInfo = {
+        const committeeInfo = {
           type: 'committee',
           chairmen: [],
           members: [],
@@ -89,17 +49,18 @@ function processXML(xmlString) {
             committeeInfo.clerks.push(child.textContent.trim());
           }
         });
+        setCommitteeInfo(committeeInfo);
         break;
 
       case 'minor-heading':
-        hasMinorHeading = true;
+        setHasMinorHeading();
         finalizeCurrentDebate();
         currentDebate = createDebate(node.getAttribute('id')?.split('/').pop(), node.textContent.trim(), currentType);
         break;
 
       case 'speech':
         if (!currentDebate) {
-          const id = node.getAttribute('id')?.split('/').pop() || `speech_${debateCounter + 1}`;
+          const id = node.getAttribute('id')?.split('/').pop() || `speech_${debates.length + 1}`;
           currentDebate = createDebate(id, "No Title", currentType);
         }
         const speakerId = node.getAttribute('person_id')?.split('/').pop() || null;
@@ -132,7 +93,7 @@ function processXML(xmlString) {
             });
           });
         });
-        divisionCounts.push(divisionCount);
+        addDivisionCount(divisionCount);
         break;
     }
 
@@ -144,15 +105,7 @@ function processXML(xmlString) {
   processNode(xmlDoc.documentElement);
   finalizeCurrentDebate();
 
-  // If there were no minor headings, ensure we have at least one debate
-  if (!hasMinorHeading && debates.length === 0) {
-    debates.push(createDebate(null, "No Title", currentType));
-  }
-
-  return debates.map(debate => ({
-    ...debate,
-    speaker_ids: Array.from(debate.speaker_ids)
-  }));
+  return finalizeDebates(debates);
 }
 
 module.exports = { processXML };
