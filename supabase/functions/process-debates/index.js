@@ -1,20 +1,63 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { validDebateTypes } from './config.js'
-import { processSingleDebateType } from './batchProcessor.js'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { cron } from "https://deno.land/x/deno_cron@v1.0.0/cron.ts";
+import { processAndStoreData } from './fetchandstore/storedata.js';
+import { main as generateDebates } from './generate/main.js';
+import { subDays, format } from "https://deno.land/x/date_fns@v2.22.1/index.js";
 
-serve(async (req) => {
-  const { debateTypes, startDate, endDate, batchSize } = await req.json()
+const validDebateTypes = ['commons', 'lords', 'westminster', 'publicbills'];
 
-  const types = debateTypes === 'all' ? validDebateTypes : debateTypes.split(',')
-  const size = parseInt(batchSize) || 128
+async function processLastWeek() {
+  const endDate = new Date();
+  const startDate = subDays(endDate, 7);
 
-  for (const debateType of types) {
-    console.log(`Processing ${debateType} from ${startDate || 'earliest'} to ${endDate || 'latest'}`)
-    await processSingleDebateType(debateType, size, startDate, endDate)
+  for (const debateType of validDebateTypes) {
+    let currentDate = startDate;
+    while (currentDate <= endDate) {
+      const formattedDate = format(currentDate, 'yyyy-MM-dd');
+      for (const suffix of ['a', 'b', 'c', 'd']) {
+        await processAndStoreData(formattedDate, suffix, debateType);
+      }
+      currentDate = addDays(currentDate, 1);
+    }
   }
 
-  return new Response(
-    JSON.stringify({ message: "Processing completed" }),
-    { headers: { "Content-Type": "application/json" } },
-  )
-})
+  await generateDebates({
+    debateTypes: 'all',
+    startDate: format(startDate, 'yyyy-MM-dd'),
+    endDate: format(endDate, 'yyyy-MM-dd'),
+    batchSize: 128
+  });
+
+  console.log("Weekly processing and generation completed.");
+}
+
+// Schedule the job to run daily at 6:25 PM
+cron("25 18 * * *", () => {
+  processLastWeek().catch(error => {
+    console.error("Error in scheduled job:", error);
+  });
+});
+
+serve(async (req) => {
+  if (req.method === 'POST') {
+    const { command } = await req.json();
+    if (command === 'run_now') {
+      processLastWeek().catch(error => {
+        console.error("Error in manual run:", error);
+      });
+      return new Response(JSON.stringify({ message: "Processing started" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }
+
+  return new Response(JSON.stringify({ message: "Invalid request" }), {
+    status: 400,
+    headers: { "Content-Type": "application/json" },
+  });
+});
+
+// Initial run when the function starts
+processLastWeek().catch(error => {
+  console.error("Error in initial run:", error);
+});
