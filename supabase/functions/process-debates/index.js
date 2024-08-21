@@ -1,8 +1,9 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { cron } from "https://deno.land/x/deno_cron@v1.0.0/cron.ts";
-import { processAndStoreData } from './fetchandstore/storedata.js';
+import { subDays, format, addDays } from "https://jspm.dev/date-fns@2.22.1";
+
+import { processAndStoreData } from './fetchandstore/main.js';
 import { main as generateDebates } from './generate/main.js';
-import { subDays, format } from "https://deno.land/x/date_fns@v2.22.1/index.js";
 
 const validDebateTypes = ['commons', 'lords', 'westminster', 'publicbills'];
 
@@ -25,7 +26,7 @@ async function processLastWeek() {
     debateTypes: 'all',
     startDate: format(startDate, 'yyyy-MM-dd'),
     endDate: format(endDate, 'yyyy-MM-dd'),
-    batchSize: 128
+    batchSize: 512
   });
 
   console.log("Weekly processing and generation completed.");
