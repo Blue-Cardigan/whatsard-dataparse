@@ -4,14 +4,14 @@ const { createClient } = require('@supabase/supabase-js');
 
 require('dotenv').config();
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+const supabaseUrl = process.env.DATABASE_URL;
+const supabaseServiceKey = process.env.SERVICE_KEY;
 
 let supabase = null;
 
 function initSupabase(supabaseUrl, supabaseServiceKey) {
     if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in environment variables');
+      throw new Error('DATABASE_URL and SERVICE_KEY must be set in environment variables');
     }
     if (!supabase) {
       supabase = createClient(supabaseUrl, supabaseServiceKey, {

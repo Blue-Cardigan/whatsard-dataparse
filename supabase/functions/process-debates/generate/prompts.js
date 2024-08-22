@@ -13,10 +13,12 @@ const categoryOptions = [
         return `
           ###INSTRUCTION###
           Rewrite these speeches from a UK ${categoryName} debate in the style of Whatsapp messages. 
-          Keep close to the original meaning to avoid defamation.
-          Clarify meaning which has been obfuscated by the original style. 
-          Focus on data and key arguments.
-          Use British English spelling with some emojis, and markdown formatting for long messages.
+          - Clarify meaning which has been obfuscated by the original style. 
+          - Attribute the original speaker name to the message to avoid defamation.
+          - Use British English spelling.
+          - Use markdown to highlight key data and arguments.
+          - Use a serious tone for serious topics, such as violence or extreme poverty.
+          - Use one or two emojis if the message is a joke or a light topic.
           
           Provide your response as JSON with keys for "speakername", and "rewritten_speech". 
           Reduce the number of messages if necessary, but ensure all speakers are represented and all data and arguments are preserved. 

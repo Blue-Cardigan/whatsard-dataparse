@@ -52,7 +52,7 @@ export function processXML(xmlString) {
           currentDebate = createDebate(debateId, debateTitle, debateType);
         }
         const speakerId = node.getAttribute('person_id')?.split('/').pop() || null;
-        const speakerName = node.getAttribute('speakername') || null;
+        const speakerName = node.getAttribute('speakername') || 'No Name';
         const content = Array.from(node.getElementsByTagName('p'))
           .map(p => p.textContent.trim())
           .join('\n');

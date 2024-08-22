@@ -86,12 +86,12 @@ export async function updateDatabase(results, debateType) {
 
         const hasOtherSpeakers = debate.speaker_names && 
                                  Array.isArray(debate.speaker_names) && 
-                                 debate.speaker_names.some(name => name !== "Lindsay Hoyle");
+                                 debate.speaker_names.some(name => name && name !== "Lindsay Hoyle" && name !== "No Name");
 
         if (hasOtherSpeakers) {
           updateData.analysis = content.analysis;
         } else {
-          console.log(`Skipping analysis for debate ID ${id} in ${debateType} as it only has Lindsay Hoyle as speaker`);
+          console.log(`Skipping analysis for debate ID ${id} in ${debateType} as it only has Lindsay Hoyle or empty speaker names`);
           continue;
         }
       } else if (type === 'labels') {
