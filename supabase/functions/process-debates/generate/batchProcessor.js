@@ -4,14 +4,14 @@ import { prepareBatchFile } from './debateProcessor.js';
 import { GENERATION_TYPES } from './config.js';
 
 export async function processSingleDebateType(debateType, batchSize, startDate, endDate) {
-  const debates = await fetchUnprocessedDebates(batchSize, debateType, startDate, endDate);
+  const { debates, count } = await fetchUnprocessedDebates(batchSize, debateType, startDate, endDate);
   
-  if (debates.length === 0) {
+  if (count === 0) {
     console.log(`No unprocessed debates found for ${debateType} within specified date range and size limit.`);
     return;
   }
 
-  console.log(`Processing ${debates.length} debates for ${debateType}`);
+  console.log(`Processing ${count} debates for ${debateType}`);
 
   for (const generationType of GENERATION_TYPES) {
     const debatesToProcess = debates.filter(debate => {
@@ -45,7 +45,3 @@ export async function processSingleDebateType(debateType, batchSize, startDate, 
     }
   }
 }
-
-export default = {
-  processSingleDebateType,
-};

@@ -4,7 +4,6 @@
 *.jsonl
 /node_modules/
 /.vscode/
-/supabase/
 /public/
 /dist/
 /build/

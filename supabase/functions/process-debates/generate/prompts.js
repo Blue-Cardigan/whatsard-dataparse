@@ -5,7 +5,7 @@ const categoryOptions = [
     { id: 'publicbills', name: 'Public Bill Committee' },
   ];
   
-  function getPromptForCategory(category, type) {
+  export function getPromptForCategory(category, type) {
     const categoryName = categoryOptions.find(option => option.id === category)?.name || 'Unknown';
     
     switch (type) {
@@ -83,4 +83,6 @@ const categoryOptions = [
     }
   }
   
-  module.exports = { getPromptForCategory };
+  export default {
+    getPromptForCategory,
+  };

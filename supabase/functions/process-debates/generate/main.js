@@ -1,5 +1,6 @@
 import { validDebateTypes } from './config.js';
 import { processSingleDebateType } from './batchProcessor.js';
+import { fetchUnprocessedDebates } from './db.js';
 
 async function main(params) {
   const debateTypes = params.debateTypes === 'all' ? validDebateTypes : params.debateTypes.split(',');
@@ -8,8 +9,23 @@ async function main(params) {
   const endDate = params.endDate || null;
 
   for (const debateType of debateTypes) {
-    console.log(`Processing ${debateType} from ${startDate || 'earliest'} to ${endDate || 'latest'}`);
-    await processSingleDebateType(debateType, batchSize, startDate, endDate);
+    let currentEndDate = null; // Start with the most recent debates
+    let hasMoreDebates = true;
+
+    while (hasMoreDebates) {
+      console.log(`Processing ${debateType} up to ${currentEndDate || 'latest'}`);
+      const debates = await fetchUnprocessedDebates(batchSize, debateType, null, currentEndDate);
+      
+      if (debates.length === 0) {
+        hasMoreDebates = false;
+        continue;
+      }
+
+      await processSingleDebateType(debateType, batchSize, null, currentEndDate);
+
+      // Update the end date for the next iteration
+      currentEndDate = debates[debates.length - 1].id.split(debateType)[1];
+    }
   }
 }
 

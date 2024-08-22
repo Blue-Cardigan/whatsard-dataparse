@@ -1,9 +1,9 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.21.0';
-import { DATABASE_URL, SERVICE_KEY } from './config.js';
+const { createClient } = require('@supabase/supabase-js');
+const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = require('./config');
 
-const supabase = createClient(DATABASE_URL, SERVICE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-export async function fetchUnprocessedDebates(batchSize, debateType, startDate, endDate) {
+async function fetchUnprocessedDebates(batchSize, debateType, startDate, endDate) {
     const query = supabase
       .from(debateType)
       .select('id, title, speeches, rewritten_speeches, analysis, labels, speaker_names')
@@ -14,10 +14,10 @@ export async function fetchUnprocessedDebates(batchSize, debateType, startDate, 
       .limit(batchSize);
   
     if (startDate) {
-      query.gte('id', `${debateType}${startDate}`);
+      query.gte('id', `${debateType}_${startDate}`);
     }
     if (endDate) {
-      query.lte('id', `${debateType}${endDate}`);
+      query.lte('id', `${debateType}_${endDate}`);
     }
   
     const { data, error } = await query;
@@ -29,15 +29,12 @@ export async function fetchUnprocessedDebates(batchSize, debateType, startDate, 
       return speechesJson.length < 100000;
     });
   
-    console.log(`Fetched ${filteredData.length} debates for ${debateType} within size limit`);
+    console.log(`Fetched ${data.length} debates for ${debateType}, ${filteredData.length} within size limit`);
+  
+    return filteredData;
+  }
 
-    return {
-      debates: filteredData,
-      count: filteredData.length
-    };
-}
-
-export async function updateDatabase(results, debateType) {
+async function updateDatabase(results, debateType) {
   const validDebateTypes = ['commons', 'lords', 'westminster', 'publicbills'];
   
   for (const result of results) {
@@ -119,4 +116,8 @@ export async function updateDatabase(results, debateType) {
   }
 }
 
-export { supabase };
+module.exports = {
+  supabase,
+  fetchUnprocessedDebates,
+  updateDatabase,
+};

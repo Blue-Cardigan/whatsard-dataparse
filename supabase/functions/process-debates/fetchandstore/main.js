@@ -211,7 +211,7 @@ async function main(args) {
 }
 
 // Export the main function and processAndStoreData for use in other modules
-export { main, processAndStoreData };
+export { main, processAndStoreData, processDebateType };
 
 // If this module is the main module being run, execute the main function
 if (import.meta.main) {

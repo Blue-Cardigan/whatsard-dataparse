@@ -74,5 +74,3 @@ export function processXML(xmlString) {
 
   return finalizeDebates(debates);
 }
-
-module.exports = { processXML };

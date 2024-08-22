@@ -76,5 +76,3 @@ export function createDebateProcessor(debateType) {
     setHasMinorHeading: () => { hasMinorHeading = true; }
   };
 }
-
-module.exports = createDebateProcessor;

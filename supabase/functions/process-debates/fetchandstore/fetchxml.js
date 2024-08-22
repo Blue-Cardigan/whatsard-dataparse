@@ -20,7 +20,7 @@ async function getPublicBillFiles(dateString) {
   return files;
 }
 
-async function fetchXMLData(dateString = '', suffix = '', debateType = 'commons') {
+export async function fetchXMLData(dateString = '', suffix = '', debateType = 'commons') {
   let url;
   if (debateType === 'publicbills') {
     if (!dateString) {
@@ -67,5 +67,3 @@ async function fetchXMLData(dateString = '', suffix = '', debateType = 'commons'
     throw error;
   }
 }
-
-export { fetchXMLData };

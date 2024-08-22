@@ -1,8 +1,0 @@
-{
-  "imports": {
-    "@/": "./src/",
-    "std/": "https://deno.land/std@0.190.0/",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.21.0",
-    "fast-xml-parser": "https://esm.sh/fast-xml-parser@4.2.2"
-  }
-}

@@ -1,8 +1,7 @@
 import { getPromptForCategory } from './prompts.js';
 import { MAX_FILE_SIZE } from './config.js';
-import { writeFile } from 'https://deno.land/std@0.177.0/fs/mod.ts';
 
-async function prepareBatchFile(debates, debateType, generationType) {
+export async function prepareBatchFile(debates, debateType, generationType) {
   const batchRequests = [];
   let currentSize = 0;
 
@@ -43,7 +42,10 @@ async function prepareBatchFile(debates, debateType, generationType) {
   const batchFileContent = batchRequests.join('\n');
   console.log(`Total batch file length: ${batchFileContent.length} characters`);
   const fileName = `batchinput_${debateType}_${generationType}.jsonl`;
-  await writeFile(fileName, new TextEncoder().encode(batchFileContent));
+  
+  // Use Deno.writeFile instead of the imported writeFile function
+  await Deno.writeFile(fileName, new TextEncoder().encode(batchFileContent));
+  
   console.log(`Batch input file created: ${fileName}`);
   return fileName;
 }
