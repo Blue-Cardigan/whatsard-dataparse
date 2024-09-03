@@ -1,0 +1,287 @@
+const OpenAI = require('openai');
+const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
+const path = require('path');
+require('dotenv').config();
+const fsPromises = require('fs').promises;
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.DATABASE_URL,
+  process.env.SERVICE_KEY
+);
+
+async function uploadBatchFile(filename) {
+    const filePath = path.join(process.cwd(), filename);
+    const stats = fs.statSync(filePath);
+    console.log(`Uploading file with size: ${stats.size} bytes`);
+  
+    const stream = fs.createReadStream(filePath);
+    let retries = 0;
+    const maxRetries = 3;
+  
+    while (retries < maxRetries) {
+      try {
+        const file = await openai.files.create({
+          file: stream,
+          purpose: 'batch'
+        });
+        console.log('File uploaded:', file.id);
+        return file.id;
+      } catch (error) {
+        console.error(`Upload attempt ${retries + 1} failed:`, error.message);
+        retries++;
+        if (retries < maxRetries) {
+          const delay = Math.pow(2, retries) * 1000; // Exponential backoff
+          console.log(`Retrying in ${delay / 1000} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          throw error;
+        }
+      } finally {
+        stream.close();
+      }
+    }
+  }
+
+  async function createBatch(fileId) {
+    const batch = await openai.batches.create({
+      input_file_id: fileId,
+      endpoint: "/v1/chat/completions",
+      completion_window: "24h"
+    });
+    console.log('Batch created:', batch);
+    return batch.id;
+  }
+  
+  async function checkBatchStatus(batchId) {
+    let batch;
+    do {
+      batch = await openai.batches.retrieve(batchId);
+      console.log('Batch status:', batch.status);
+      if (batch.status !== 'completed') {
+        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait for 1 minute
+      }
+    } while (batch.status !== 'completed' && batch.status !== 'failed' && batch.status !== 'expired');
+    return batch;
+  }
+  
+  async function retrieveResults(fileId) {
+    const fileResponse = await openai.files.content(fileId);
+    const fileContents = await fileResponse.text();
+  
+    if (!fileContents.trim()) {
+      console.error('Retrieved file is empty');
+      return [];
+    }
+  
+    const lines = fileContents.split('\n').filter(line => line.trim());
+    console.log(`Number of result lines: ${lines.length}`);
+  
+    return lines.map((line, index) => {
+      try {
+        return JSON.parse(line);
+      } catch (error) {
+        console.error(`Error parsing JSON on line ${index + 1}:`, error);
+        console.error('Problematic line:', line);
+        return null;
+      }
+    }).filter(result => result !== null);
+  }
+
+async function fetchUnprocessedDebates(batchSize, debateType, startDate, endDate, type = 'all') {
+  const query = supabase
+    .from(debateType)
+    .select('id, title, speeches, rewritten_speeches, analysis, labels')
+    .filter('speeches', 'not.eq', '[]')
+    .filter('speeches', 'not.eq', null)
+    .order('id', { ascending: true })
+    .limit(batchSize);
+
+  if (type === 'rewrite') {
+    query.is('rewritten_speeches', null);
+  } else if (type === 'analysis') {
+    query.is('analysis', null);
+  } else if (type === 'labels') {
+    query.is('labels', null);
+  } else if (type === 'all') {
+    query.or('rewritten_speeches.is.null,analysis.is.null,labels.is.null');
+  }
+
+  if (startDate) {
+    query.gte('id', startDate.includes('_') ? startDate : `${debateType}_${startDate}`);
+  }
+  if (endDate) {
+    query.lte('id', `${debateType}_${endDate}`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+
+  const filteredData = data.filter(debate => {
+    const speechesJson = JSON.stringify(debate.speeches);
+    return speechesJson.length < 100000;
+  });
+
+  console.log(`Fetched ${data.length} debates for ${debateType}, ${filteredData.length} within size limit`);
+
+  return filteredData;
+}
+
+async function prepareBatchFile(debates, debateType, getPromptForCategory) {
+  const batchRequests = [];
+  const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB limit
+  let currentSize = 0;
+
+  for (const debate of debates) {
+    const { id, title, speeches, rewritten_speeches, analysis, labels } = debate;
+
+    if (speeches.length === 1 && !speeches[0].speakername) {
+      console.log(`Skipping processing for debate ID: ${id} - Single speech with null speakername`);
+      continue;
+    }
+
+    const content = `Title: ${title}\n\nSpeeches:\n${JSON.stringify(speeches, null, 2)}`;
+
+    if (rewritten_speeches === null) {
+      const rewriteRequest = createRequest(id, debateType, 'rewrite', content, getPromptForCategory);
+      if (!addRequestToBatch(rewriteRequest, batchRequests, currentSize, MAX_FILE_SIZE)) break;
+      currentSize += rewriteRequest.length + 1;
+    }
+
+    if (analysis === null) {
+      const analysisRequest = createRequest(`${id}_analysis`, debateType, 'analysis', content, getPromptForCategory);
+      if (!addRequestToBatch(analysisRequest, batchRequests, currentSize, MAX_FILE_SIZE)) break;
+      currentSize += analysisRequest.length + 1;
+    }
+
+    if (labels === null) {
+      const labelsRequest = createRequest(`${id}_labels`, debateType, 'labels', content, getPromptForCategory);
+      if (!addRequestToBatch(labelsRequest, batchRequests, currentSize, MAX_FILE_SIZE)) break;
+      currentSize += labelsRequest.length + 1;
+    }
+  }
+
+  const batchFileContent = batchRequests.join('\n');
+  console.log(`Total batch file length: ${batchFileContent.length} characters`);
+  const fileName = `batchinput_${debateType}.jsonl`;
+  await fsPromises.writeFile(fileName, batchFileContent);
+  console.log(`Batch input file created: ${fileName}`);
+  return fileName;
+}
+
+function createRequest(id, debateType, type, content, getPromptForCategory) {
+  return JSON.stringify({
+    custom_id: id,
+    method: "POST",
+    url: "/v1/chat/completions",
+    body: {
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: getPromptForCategory(debateType, type) },
+        { role: "user", content: content }
+      ],
+      response_format: { type: "json_object" }
+    }
+  });
+}
+
+function addRequestToBatch(request, batchRequests, currentSize, maxSize) {
+  if (currentSize + request.length > maxSize) {
+    console.log(`Reached size limit. Stopping at ${batchRequests.length} requests.`);
+    return false;
+  }
+  batchRequests.push(request);
+  return true;
+}
+
+async function updateDatabase(results, debateType) {
+  for (const result of results) {
+    const { custom_id, response } = result;
+    if (response.status_code === 200) {
+      const [id, type] = custom_id.split('_');
+      const content = JSON.parse(response.body.choices[0].message.content);
+      
+      let updateData = {};
+      if (!type) {
+        updateData.rewritten_speeches = content.speeches || [];
+      } else if (type === 'analysis') {
+        updateData.analysis = content.analysis;
+      } else if (type === 'labels') {
+        updateData.labels = content.labels;
+      }
+
+      const { error } = await supabase
+        .from(debateType)
+        .update(updateData)
+        .eq('id', id);
+      
+      if (error) {
+        console.error(`Error updating database for ID ${id} in ${debateType}:`, error);
+      } else {
+        console.log(`Updated ${type || 'rewritten speeches'} for debate ID ${id} in ${debateType}`);
+      }
+    } else {
+      console.error(`Error processing ID ${custom_id}:`, response.error);
+    }
+  }
+}
+
+async function batchProcessDebates(batchSize, debateTypes, startDate, getPromptForCategory) {
+  try {
+    const allDebates = [];
+    const debateTypesArray = Array.isArray(debateTypes) ? debateTypes : [debateTypes];
+    const debatesPerType = Math.ceil(batchSize / debateTypesArray.length);
+
+    for (const debateType of debateTypesArray) {
+      const debates = await fetchUnprocessedDebates(debatesPerType, debateType, startDate, null, 'all');
+      allDebates.push(...debates);
+    }
+
+    if (allDebates.length === 0) {
+      console.log('No unprocessed debates found within size limit.');
+      return;
+    }
+    
+    const fileName = await prepareBatchFile(allDebates, debateTypes[0], getPromptForCategory);
+    const fileId = await uploadBatchFile(fileName);
+    const batchId = await createBatch(fileId);
+    const completedBatch = await checkBatchStatus(batchId);
+    
+    if (completedBatch.status === 'completed') {
+      const results = await retrieveResults(completedBatch.output_file_id);
+      if (results.length === 0) {
+        console.error('No valid results retrieved from the batch');
+        return;
+      }
+      for (const result of results) {
+        const debateType = debateTypesArray.find(type => result.custom_id.startsWith(type));
+        await updateDatabase([result], debateType);
+      }
+      console.log('Batch processing completed successfully');
+    } else {
+      console.error('Batch processing failed or expired');
+    }
+  } catch (error) {
+    console.error('Error in batch processing:', error);
+  }
+}
+
+module.exports = {
+  openai,
+  supabase,
+  uploadBatchFile,
+  createBatch,
+  checkBatchStatus,
+  retrieveResults,
+  fetchUnprocessedDebates,
+  prepareBatchFile,
+  updateDatabase,
+  batchProcessDebates,
+};

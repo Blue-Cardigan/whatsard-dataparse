@@ -3,6 +3,7 @@
     "test": "jest",
     "test:watch": "jest --watch"
   },
+  "type": "module",
   "jest": {
     "testEnvironment": "node",
     "moduleDirectories": [
@@ -19,6 +20,7 @@
     "csv-parser": "^3.0.0",
     "date-fns": "^3.6.0",
     "dotenv": "^16.4.5",
+    "openai": "^4.57.1",
     "xmldom": "^0.6.0"
   }
 }
