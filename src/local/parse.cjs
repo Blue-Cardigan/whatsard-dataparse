@@ -1,9 +1,9 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
-const { processXML: processCommonsXML } = require('./parsexml/commons.cjs');
-const { processXML: processLordsXML } = require('./parsexml/lords.cjs');
-const { processXML: processWestminsterXML } = require('./parsexml/westminster.cjs');
-const { processXML: processPublicBillXML } = require('./parsexml/publicbills.cjs');
+const { processXML: processCommonsXML } = require('./parse/parsexml/commons.cjs');
+const { processXML: processLordsXML } = require('./parse/parsexml/lords.cjs');
+const { processXML: processWestminsterXML } = require('./parse/parsexml/westminster.cjs');
+const { processXML: processPublicBillsXML } = require('./parse/parsexml/publicbills.cjs');
 const { fetchXMLData } = require('./parse/fetchxml.cjs');
 const { format, addDays, parse, isAfter, isBefore, isValid } = require('date-fns');
 const { generateExtracts } = require('./parse/extracts.cjs');

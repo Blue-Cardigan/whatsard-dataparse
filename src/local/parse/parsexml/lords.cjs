@@ -1,5 +1,5 @@
 const { DOMParser } = require('xmldom');
-const { createDebateProcessor } = require('../debateProcessor.cjs');
+const createDebateProcessor = require('../debateProcessor.cjs');
 
 function processLordsXML(xmlString) {
   const parser = new DOMParser();
