@@ -1,3 +1,6 @@
+// Run with eg
+// node src/local/generate.cjs startDate=2024-09-02 debateType=commons
+
 const { processSingleDebateType } = require('./generate/supportingInfo.cjs');
 const { batchProcessDebates } = require('./generate/batchProcessor.cjs');
 
@@ -6,18 +9,20 @@ async function runBothProcesses() {
   const params = Object.fromEntries(args.map(arg => arg.split('=')));
 
   // Parameters for all processes
-  const debateTypes = params.debateTypes === 'all' ? ['commons', 'lords', 'westminster', 'publicbills'] : params.debateTypes.split(',');
+  const debateType = params.debateType ? 
+    (params.debateType === 'all' ? ['commons', 'lords', 'westminster', 'publicbills'] : params.debateType.split(','))
+    : ['commons', 'lords', 'westminster', 'publicbills'];
   const batchSize = parseInt(params.batchSize) || 32;
   const startDate = params.startDate || null;
   const endDate = params.endDate || null;
 
   console.log('Starting supportingInfo process (analysis and labels)...');
-  for (const debateType of debateTypes) {
-    await processSingleDebateType(debateType, batchSize, startDate, endDate, getPromptForCategory);
+  for (const type of debateType) {
+    await processSingleDebateType(type, batchSize, startDate, endDate, getPromptForCategory);
   }
 
   console.log('Starting mainChat process (rewrite)...');
-  await batchProcessDebates(batchSize, debateTypes, startDate, getPromptForCategory);
+  await batchProcessDebates(batchSize, debateType, startDate, getPromptForCategory);
 
   console.log('All processes completed.');
 }
@@ -77,18 +82,34 @@ function getPromptForCategory(category, type) {
   } else if (type === 'labels') {
     return `
     ###INSTRUCTIONS###
-    Analyze this UK ${categoryName} debate then provide 3 categories and 10 tags to identify the core topics.
+    Analyze this UK ${categoryName} ${debateOrDiscussion} then provide up to 5 topics and up to 10 tags to use as metadata.
     Use British English spelling. 
+
+    #Select Topics From this List Only#
+      Environment and Natural Resources
+      Healthcare and Social Welfare
+      Economy, Business, and Infrastructure
+      Science, Technology, and Innovation
+      Legal Affairs and Public Safety
+      International Relations and Diplomacy
+      Parliamentary Affairs and Governance
+      Education, Culture, and Society
+    #
+    
+    #Tags
+      Identify subtopics within the selected topics. 
+      Avoid overlapping tags such as "recall petition" and "petition officer"
+      Avoid broad tags like "Parliamentary debate" or "Official Report".
+    #
+
     Structure your response as JSON:
 
-    
     {
       "labels": {
-          "categories": ["category1", "category2", "category3"],
-          "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9", "tag10"],
+        "topics": ["Topic1", "Topic2", "More topics if needed"],
+        "tags": ["Tag1", "Tag2", "Tag3", "Tag4", "Tag5", "More tags if needed"]
       }
     }
-
     ######
       `;
   }

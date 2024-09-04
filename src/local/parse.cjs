@@ -1,3 +1,7 @@
+// Run with eg 
+// node src/local/parse.cjs startDate=2024-09-03 debateType=westminster
+// no debateType is all by default
+
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const { processXML: processCommonsXML } = require('./parse/parsexml/commons.cjs');
