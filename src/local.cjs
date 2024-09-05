@@ -7,10 +7,17 @@ function getTodayDate() {
   return today.toISOString().split('T')[0];
 }
 
+function getYesterdayDate() {
+  const today = new Date();
+  return today.toISOString().split('T')[0];
+}
+
 // Predefined parameters
+const startDate = '2024-09-04';
+const nextDay = new Date(new Date(startDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 const params = {
-  startDate: getTodayDate(),
-  endDate: null,  // Set to null to process only one day
+  startDate: startDate,
+  endDate: nextDay,  // Set to next day to process only one day
   debateType: 'commons,lords,westminster,publicbills',
   batchSize: 128
 };
@@ -43,19 +50,19 @@ async function main() {
   try {
     console.log(`Processing for date: ${params.startDate}`);
 
+    console.log('Starting parse process...');
+    await runScript('local/parse.cjs', [
+      `startDate=${params.startDate}`,
+      `endDate=${params.endDate || params.startDate}`,
+      `debateType=${params.debateType}`
+    ]);
+
     console.log('Starting generate process...');
     await runScript('local/generate.cjs', [
       `startDate=${params.startDate}`,
       `endDate=${params.endDate || params.startDate}`,
       `debateType=${params.debateType}`,
       `batchSize=${params.batchSize}`
-    ]);
-
-    console.log('Starting parse process...');
-    await runScript('local/parse.cjs', [
-      `startDate=${params.startDate}`,
-      `endDate=${params.endDate || params.startDate}`,
-      `debateType=${params.debateType}`
     ]);
 
     console.log('All processes completed successfully.');

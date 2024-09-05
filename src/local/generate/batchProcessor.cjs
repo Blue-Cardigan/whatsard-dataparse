@@ -110,11 +110,12 @@ async function fetchUnprocessedDebates(batchSize, debateType, startDate, endDate
   }
 
   if (startDate) {
-    query.gte('id', startDate.includes('_') ? startDate : `${debateType}_${startDate}`);
+    query.gte('id', `${debateType}${startDate}`);
   }
   if (endDate) {
-    query.lte('id', `${debateType}_${endDate}`);
+    query.lte('id', `${debateType}${endDate}`);
   }
+  console.log(query);
 
   const { data, error } = await query;
 
