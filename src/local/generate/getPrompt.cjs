@@ -1,4 +1,4 @@
-function getPromptForCategory(category, type) {
+function getPromptForCategory(category, type, chunkIndex = 0) {
   const categoryOptions = [
     { id: 'commons', name: 'House of Commons' },
     { id: 'westminster', name: 'Westminster Hall' },
@@ -9,11 +9,12 @@ function getPromptForCategory(category, type) {
   const categoryName = categoryOptions.find(option => option.id === category)?.name || 'Unknown';
   
   let debateOrDiscussion = category === 'publicbills' ? 'discussion' : 'debate';
+  const chunkText = chunkIndex > 0 ? `the ${ordinalSuffix(chunkIndex + 1)} part of ` : '';
 
   if (type === 'rewrite') {
     return `
       ###INSTRUCTION###
-      Rewrite these speeches from a UK ${categoryName} ${debateOrDiscussion} in the style of Whatsapp messages. 
+      Rewrite these speeches from ${chunkText}a UK ${categoryName} ${debateOrDiscussion} in the style of Whatsapp messages. 
       - Stay true to the original speaker's name and intention.
       - Keep the messages to-the-point. Remove superfluous phrases including "Thank you" or "I agree".
       - Use British English spelling.
@@ -39,7 +40,7 @@ function getPromptForCategory(category, type) {
   } else if (type === 'analysis') {
     return `
       ###INSTRUCTIONS###
-      Analyze this current UK ${categoryName} ${debateOrDiscussion} in 100 words or less.
+      Analyze ${chunkText}this current UK ${categoryName} ${debateOrDiscussion} in 100 words or less.
       Use British English spelling.
       Focus on both key characteristics and content, and the stances of the main contributors.
       Structure your response as JSON:
@@ -50,7 +51,7 @@ function getPromptForCategory(category, type) {
   } else if (type === 'labels') {
     return `
     ###INSTRUCTIONS###
-    Analyze this UK ${categoryName} ${debateOrDiscussion} then provide up to 5 topics and up to 10 tags to use as metadata.
+    Analyze ${chunkText}this UK ${categoryName} ${debateOrDiscussion} then provide up to 5 topics and up to 10 tags to use as metadata.
     Use British English spelling. 
 
     #Select Topics From this List Only#
@@ -83,6 +84,20 @@ function getPromptForCategory(category, type) {
   } else {
     return '';
   }
+}
+
+function ordinalSuffix(i) {
+  const j = i % 10, k = i % 100;
+  if (j == 1 && k != 11) {
+    return i + "st";
+  }
+  if (j == 2 && k != 12) {
+    return i + "nd";
+  }
+  if (j == 3 && k != 13) {
+    return i + "rd";
+  }
+  return i + "th";
 }
 
 module.exports = { getPromptForCategory };

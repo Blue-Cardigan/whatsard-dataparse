@@ -1,16 +1,17 @@
 const { fetchUnprocessedDebates, prepareBatchFile, updateDatabase, uploadBatchFile, createBatch, checkBatchStatus, retrieveResults } = require('./batchProcessor.cjs');
-const { getPromptForCategory } = require('./getPromptForCategory.cjs');
+const { getPromptForCategory } = require('./getPrompt.cjs');
 require('dotenv').config();
 
 async function processSingleDebateType(debateType, batchSize, startDate, endDate) {
-  const debates = await fetchUnprocessedDebates(batchSize, debateType, startDate, endDate);
+  const { filteredData, longDebates } = await fetchUnprocessedDebates(batchSize, debateType, startDate, endDate);
   
-  if (debates.length === 0) {
+  if (filteredData.length === 0 && longDebates.length === 0) {
     console.log(`No unprocessed debates found for ${debateType} within specified date range and size limit.`);
     return;
   }
 
-  const batchFileName = await prepareBatchFile(debates, debateType, getPromptForCategory);
+  const allDebates = [...filteredData, ...longDebates];
+  const batchFileName = await prepareBatchFile(allDebates, debateType, getPromptForCategory);
   const fileId = await uploadBatchFile(batchFileName);
   const batchId = await createBatch(fileId);
   const completedBatch = await checkBatchStatus(batchId);

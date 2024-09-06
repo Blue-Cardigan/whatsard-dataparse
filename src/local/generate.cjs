@@ -3,7 +3,7 @@
 
 const { processSingleDebateType } = require('./generate/supportingInfo.cjs');
 const { batchProcessDebates } = require('./generate/batchProcessor.cjs');
-const { getPromptForCategory } = require('./generate/getPromptForCategory.cjs');
+const { getPromptForCategory } = require('./generate/getPrompt.cjs');
 
 async function runBothProcesses() {
   const args = process.argv.slice(2);

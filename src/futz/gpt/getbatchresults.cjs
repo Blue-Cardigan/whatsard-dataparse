@@ -57,7 +57,8 @@ async function getBatchResults(batchId) {
         console.log(`Number of results: ${results.length}`);
         
         // Upload the results to Supabase
-        await updateDatabase(results);
+        // await updateDatabase(results);
+        console.log(results[0].response.body.choices[0].message.content);
       } else if (batch.error_file_id) {
         // Retrieve the error details
         const errorFileResponse = await openai.files.content(batch.error_file_id);

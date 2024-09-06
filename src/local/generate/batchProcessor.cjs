@@ -123,14 +123,43 @@ async function fetchUnprocessedDebates(batchSize, debateType, startDate, endDate
 
   if (error) throw error;
 
+  const longDebates = [];
   const filteredData = data.filter(debate => {
     const speechesJson = JSON.stringify(debate.speeches);
-    return speechesJson.length < 100000;
+    if (speechesJson.length >= 100000) {
+      longDebates.push(debate);
+      return false;
+    }
+    return true;
   });
 
-  console.log(`Fetched ${data.length} debates for ${debateType}, ${filteredData.length} within size limit`);
+  console.log(`Fetched ${data.length} debates for ${debateType}, ${filteredData.length} within size limit, ${longDebates.length} marked for splitting`);
 
-  return filteredData;
+  return { filteredData, longDebates };
+}
+
+function splitLongDebate(debate, maxChunkSize = 100000) {
+  const { id, title, speeches } = debate;
+  const chunks = [];
+  let currentChunk = [];
+  let currentSize = 0;
+
+  speeches.forEach(speech => {
+    const speechJson = JSON.stringify(speech);
+    if (currentSize + speechJson.length > maxChunkSize) {
+      chunks.push({ id, title, speeches: currentChunk });
+      currentChunk = [];
+      currentSize = 0;
+    }
+    currentChunk.push(speech);
+    currentSize += speechJson.length;
+  });
+
+  if (currentChunk.length > 0) {
+    chunks.push({ id, title, speeches: currentChunk });
+  }
+
+  return chunks;
 }
 
 async function prepareBatchFile(debates, debateType, getPromptForCategory, isRewritten = false) {
@@ -139,52 +168,58 @@ async function prepareBatchFile(debates, debateType, getPromptForCategory, isRew
   let currentSize = 0;
 
   for (const debate of debates) {
-    const { id, title, speeches } = debate;
+    const debateChunks = debate.speeches.length >= 100000 ? splitLongDebate(debate) : [debate];
 
-    if (speeches.length === 1 && !speeches[0].speakername) {
-      console.log(`Skipping processing for debate ID: ${id} - Single speech with null speakername`);
-      continue;
-    }
+    for (let chunkIndex = 0; chunkIndex < debateChunks.length; chunkIndex++) {
+      const chunk = debateChunks[chunkIndex];
+      const { id, title, speeches } = chunk;
 
-    const content = `Title: ${title}\n\nSpeeches:\n${JSON.stringify(speeches, null, 2)}`;
-
-    const createRequestBody = (customId, category) => {
-      const prompt = getPromptForCategory(debateType, category);
-      if (typeof prompt !== 'string') {
-        console.log(prompt)
-        throw new Error(`Invalid prompt type for category ${category}. Expected string, got ${typeof prompt}`);
+      if (speeches.length === 1 && !speeches[0].speakername) {
+        console.log(`Skipping processing for debate ID: ${id} - Single speech with null speakername`);
+        continue;
       }
 
-      return {
-        custom_id: customId,
-        method: "POST",
-        url: "/v1/chat/completions",
-        body: {
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: prompt },
-            { role: "user", content: content }
-          ],
-          response_format: { type: "json_object" }
+      const content = `Title: ${title}\n\nSpeeches:\n${JSON.stringify(speeches, null, 2)}`;
+
+      const createRequestBody = (customId, category) => {
+        const prompt = getPromptForCategory(debateType, category, chunkIndex);
+        if (typeof prompt !== 'string') {
+          console.log(prompt)
+          throw new Error(`Invalid prompt type for category ${category}. Expected string, got ${typeof prompt}`);
         }
+
+        return {
+          custom_id: customId,
+          method: "POST",
+          url: "/v1/chat/completions",
+          body: {
+            model: "gpt-4o",
+            messages: [
+              { role: "system", content: prompt },
+              { role: "user", content: content }
+            ],
+            response_format: { type: "json_object" }
+          }
+        };
       };
-    };
 
-    const analysisRequest = JSON.stringify(createRequestBody(isRewritten ? id : `${id}_analysis`, isRewritten ? 'rewrite' : 'analysis'));
+      const customId = `${id}_chunk${chunkIndex}_${isRewritten ? 'rewrite' : 'analysis'}`;
+      const analysisRequest = JSON.stringify(createRequestBody(customId, isRewritten ? 'rewrite' : 'analysis'));
 
-    if (currentSize + analysisRequest.length > MAX_FILE_SIZE) {
-      console.log(`Reached size limit. Stopping at ${batchRequests.length} debates.`);
-      break;
-    }
+      if (currentSize + analysisRequest.length > MAX_FILE_SIZE) {
+        console.log(`Reached size limit. Stopping at ${batchRequests.length} debates.`);
+        break;
+      }
 
-    console.log(`Debate ID ${id} request length: ${analysisRequest.length} characters`);
-    batchRequests.push(analysisRequest);
-    currentSize += analysisRequest.length + 1; // +1 for newline
+      console.log(`Debate ID ${id} chunk ${chunkIndex} request length: ${analysisRequest.length} characters`);
+      batchRequests.push(analysisRequest);
+      currentSize += analysisRequest.length + 1; // +1 for newline
 
-    if (!isRewritten) {
-      const labelsRequest = JSON.stringify(createRequestBody(`${id}_labels`, 'labels'));
-      batchRequests.push(labelsRequest);
-      currentSize += labelsRequest.length + 1;
+      if (!isRewritten) {
+        const labelsRequest = JSON.stringify(createRequestBody(`${id}_chunk${chunkIndex}_labels`, 'labels'));
+        batchRequests.push(labelsRequest);
+        currentSize += labelsRequest.length + 1;
+      }
     }
   }
 
@@ -197,37 +232,49 @@ async function prepareBatchFile(debates, debateType, getPromptForCategory, isRew
 }
 
 async function updateDatabase(results, debateType, isRewritten = false) {
+  const combinedResults = {};
+
   for (const result of results) {
     const { custom_id, response } = result;
     if (response.status_code === 200) {
-      const [id, type] = custom_id.split('_');
+      const [id, chunk, type] = custom_id.split('_');
       const content = JSON.parse(response.body.choices[0].message.content);
-      
-      let updateData = {};
-      if (isRewritten) {
-        let rewrittenSpeeches = content;
-        if (rewrittenSpeeches.speeches && Array.isArray(rewrittenSpeeches.speeches)) {
-          rewrittenSpeeches = rewrittenSpeeches.speeches;
-        }
-        updateData.rewritten_speeches = rewrittenSpeeches;
-      } else if (type === 'analysis') {
-        updateData.analysis = content.analysis;
-      } else if (type === 'labels') {
-        updateData.labels = content.labels;
+
+      if (!combinedResults[id]) {
+        combinedResults[id] = { analysis: '', labels: { topics: [], tags: [] }, rewritten_speeches: [] };
       }
 
-      const { error } = await supabase
-        .from(debateType)
-        .update(updateData)
-        .eq('id', id);
-      
-      if (error) {
-        console.error(`Error updating database for ID ${id} in ${debateType}:`, error);
-      } else {
-        console.log(`Updated ${isRewritten ? 'rewritten speeches' : type} for debate ID ${id} in ${debateType}`);
+      if (isRewritten) {
+        combinedResults[id].rewritten_speeches = combinedResults[id].rewritten_speeches.concat(content.speeches);
+      } else if (type === 'analysis') {
+        combinedResults[id].analysis += content.analysis + '\n\n';
+      } else if (type === 'labels') {
+        combinedResults[id].labels.topics = combinedResults[id].labels.topics.concat(content.labels.topics);
+        combinedResults[id].labels.tags = combinedResults[id].labels.tags.concat(content.labels.tags);
       }
     } else {
       console.error(`Error processing ID ${custom_id}:`, response.error);
+    }
+  }
+
+  for (const id in combinedResults) {
+    const updateData = {};
+    if (isRewritten) {
+      updateData.rewritten_speeches = combinedResults[id].rewritten_speeches;
+    } else {
+      updateData.analysis = combinedResults[id].analysis.trim();
+      updateData.labels = combinedResults[id].labels;
+    }
+
+    const { error } = await supabase
+      .from(debateType)
+      .update(updateData)
+      .eq('id', id);
+
+    if (error) {
+      console.error(`Error updating database for ID ${id} in ${debateType}:`, error);
+    } else {
+      console.log(`Updated ${isRewritten ? 'rewritten speeches' : 'analysis and labels'} for debate ID ${id} in ${debateType}`);
     }
   }
 }
@@ -245,16 +292,18 @@ async function fetchErrorFile(errorFileId) {
 async function batchProcessDebates(batchSize, debateTypes, startDate, getPromptForCategory) {
   try {
     const allDebates = [];
+    const longDebates = [];
     const debateTypesArray = Array.isArray(debateTypes) ? debateTypes : [debateTypes];
     const debatesPerType = Math.ceil(batchSize / debateTypesArray.length);
     const MAX_TOTAL_DEBATES = batchSize;
 
     for (const debateType of debateTypesArray) {
-      const debates = await fetchUnprocessedDebates(debatesPerType, debateType, startDate, null, true);
-      allDebates.push(...debates);
+      const { filteredData, longDebates: typeLongDebates } = await fetchUnprocessedDebates(debatesPerType, debateType, startDate, null, true);
+      allDebates.push(...filteredData);
+      longDebates.push(...typeLongDebates);
     }
 
-    if (allDebates.length === 0) {
+    if (allDebates.length === 0 && longDebates.length === 0) {
       console.log('No unprocessed debates found within size limit.');
       return;
     }
@@ -263,7 +312,7 @@ async function batchProcessDebates(batchSize, debateTypes, startDate, getPromptF
       allDebates = allDebates.slice(0, MAX_TOTAL_DEBATES);
     }
     
-    const fileName = await prepareBatchFile(allDebates, debateTypes[0], getPromptForCategory, true);
+    const fileName = await prepareBatchFile([...allDebates, ...longDebates], debateTypes[0], getPromptForCategory, true);
     const fileId = await uploadBatchFile(fileName);
     const batchId = await createBatch(fileId);
     const completedBatch = await checkBatchStatus(batchId);

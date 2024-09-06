@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const { batchProcessDebates } = require('./batchProcessor.cjs');
-const { getPromptForCategory } = require('./getPromptForCategory.cjs');
+const { getPromptForCategory } = require('./getPrompt.cjs');
 // Parse command line arguments
 const args = process.argv.slice(2);
 let batchSize = 100; // Default batch size
