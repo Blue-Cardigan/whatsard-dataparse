@@ -2,22 +2,29 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 // Function to get today's date in YYYY-MM-DD format
+function getYesterdayDate() {
+  const today = new Date();
+  return new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+}
+
 function getTodayDate() {
   const today = new Date();
   return today.toISOString().split('T')[0];
 }
 
-function getYesterdayDate() {
+function getTomorrowDate() {
   const today = new Date();
-  return today.toISOString().split('T')[0];
+  return new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 }
 
 // Predefined parameters
-const startDate = '2024-09-04';
+const startDate = getYesterdayDate();
 const nextDay = new Date(new Date(startDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+const tomorrow = getTomorrowDate();
+
 const params = {
   startDate: startDate,
-  endDate: nextDay,  // Set to next day to process only one day
+  endDate: tomorrow,  // Set to next day to process only one day
   debateType: 'commons,lords,westminster,publicbills',
   batchSize: 128
 };

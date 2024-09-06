@@ -10,8 +10,8 @@ const openai = new OpenAI({
 
 // Initialize Supabase client
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.DATABASE_URL,
+  process.env.SERVICE_KEY
 );
 
 async function updateDatabase(results) {
@@ -58,8 +58,17 @@ async function getBatchResults(batchId) {
         
         // Upload the results to Supabase
         await updateDatabase(results);
+      } else if (batch.error_file_id) {
+        // Retrieve the error details
+        const errorFileResponse = await openai.files.content(batch.error_file_id);
+        const errorFileContents = await errorFileResponse.text();
+
+        // Save the error details to a file
+        const errorFileName = `batch_errors_${batchId}.jsonl`;
+        await fs.writeFile(errorFileName, errorFileContents);
+        console.log(`Error details saved to ${errorFileName}`);
       } else {
-        console.log('Batch completed but no output file ID found.');
+        console.log('Batch completed but no output file ID or error file ID found.');
       }
     } else if (batch.status === 'failed') {
       console.log('Batch did not complete successfully.');

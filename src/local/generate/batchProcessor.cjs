@@ -64,8 +64,11 @@ async function uploadBatchFile(filename) {
     do {
       batch = await openai.batches.retrieve(batchId);
       console.log('Batch status:', batch.status);
+      if (batch.output_file_id) {
+        console.log('Batch output_file_id:', batch.output_file_id);
+      }
       if (batch.status !== 'completed') {
-        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait for 1 minute
+        await new Promise(resolve => setTimeout(resolve, 50000)); // Wait for 5 minutes
       }
     } while (batch.status !== 'completed' && batch.status !== 'failed' && batch.status !== 'expired');
     return batch;
@@ -115,7 +118,6 @@ async function fetchUnprocessedDebates(batchSize, debateType, startDate, endDate
   if (endDate) {
     query.lte('id', `${debateType}${endDate}`);
   }
-  console.log(query);
 
   const { data, error } = await query;
 
@@ -146,43 +148,41 @@ async function prepareBatchFile(debates, debateType, getPromptForCategory, isRew
 
     const content = `Title: ${title}\n\nSpeeches:\n${JSON.stringify(speeches, null, 2)}`;
 
-    const requestBody = {
-      custom_id: isRewritten ? id : `${id}_analysis`,
-      method: "POST",
-      url: "/v1/chat/completions",
-      body: {
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: getPromptForCategory(debateType, isRewritten ? 'rewrite' : 'analysis') },
-          { role: "user", content: content }
-        ],
-        response_format: { type: "json_object" }
+    const createRequestBody = (customId, category) => {
+      const prompt = getPromptForCategory(debateType, category);
+      if (typeof prompt !== 'string') {
+        console.log(prompt)
+        throw new Error(`Invalid prompt type for category ${category}. Expected string, got ${typeof prompt}`);
       }
+
+      return {
+        custom_id: customId,
+        method: "POST",
+        url: "/v1/chat/completions",
+        body: {
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: prompt },
+            { role: "user", content: content }
+          ],
+          response_format: { type: "json_object" }
+        }
+      };
     };
 
-    const request = JSON.stringify(requestBody);
+    const analysisRequest = JSON.stringify(createRequestBody(isRewritten ? id : `${id}_analysis`, isRewritten ? 'rewrite' : 'analysis'));
 
-    if (currentSize + request.length > MAX_FILE_SIZE) {
+    if (currentSize + analysisRequest.length > MAX_FILE_SIZE) {
       console.log(`Reached size limit. Stopping at ${batchRequests.length} debates.`);
       break;
     }
 
-    console.log(`Debate ID ${id} request length: ${request.length} characters`);
-    batchRequests.push(request);
-    currentSize += request.length + 1; // +1 for newline
+    console.log(`Debate ID ${id} request length: ${analysisRequest.length} characters`);
+    batchRequests.push(analysisRequest);
+    currentSize += analysisRequest.length + 1; // +1 for newline
 
     if (!isRewritten) {
-      const labelsRequest = JSON.stringify({
-        ...requestBody,
-        custom_id: `${id}_labels`,
-        body: {
-          ...requestBody.body,
-          messages: [
-            { role: "system", content: getPromptForCategory(debateType, 'labels') },
-            { role: "user", content: content }
-          ]
-        }
-      });
+      const labelsRequest = JSON.stringify(createRequestBody(`${id}_labels`, 'labels'));
       batchRequests.push(labelsRequest);
       currentSize += labelsRequest.length + 1;
     }
@@ -232,6 +232,16 @@ async function updateDatabase(results, debateType, isRewritten = false) {
   }
 }
 
+async function fetchErrorFile(errorFileId) {
+  try {
+    const errorFileResponse = await openai.files.content(errorFileId);
+    const errorFileContents = await errorFileResponse.text();
+    console.log('Error file contents:', errorFileContents);
+  } catch (error) {
+    console.error('Error fetching error file:', error);
+  }
+}
+
 async function batchProcessDebates(batchSize, debateTypes, startDate, getPromptForCategory) {
   try {
     const allDebates = [];
@@ -259,16 +269,23 @@ async function batchProcessDebates(batchSize, debateTypes, startDate, getPromptF
     const completedBatch = await checkBatchStatus(batchId);
     
     if (completedBatch.status === 'completed') {
-      const results = await retrieveResults(completedBatch.output_file_id);
-      if (results.length === 0) {
-        console.error('No valid results retrieved from the batch');
-        return;
+      if (completedBatch.output_file_id) {
+        const results = await retrieveResults(completedBatch.output_file_id);
+        if (results.length === 0) {
+          console.error('No valid results retrieved from the batch');
+          return;
+        }
+        for (const result of results) {
+          const debateType = debateTypesArray.find(type => result.custom_id.startsWith(type));
+          await updateDatabase([result], debateType, true);
+        }
+        console.log('Batch processing completed successfully');
+      } else if (completedBatch.error_file_id) {
+        console.error('Batch completed with errors. Fetching error file...');
+        await fetchErrorFile(completedBatch.error_file_id);
+      } else {
+        console.error('Batch completed but no output or error file ID found');
       }
-      for (const result of results) {
-        const debateType = debateTypesArray.find(type => result.custom_id.startsWith(type));
-        await updateDatabase([result], debateType, true);
-      }
-      console.log('Batch processing completed successfully');
     } else {
       console.error('Batch processing failed or expired');
     }
@@ -288,4 +305,5 @@ module.exports = {
   prepareBatchFile,
   updateDatabase,
   batchProcessDebates,
+  fetchErrorFile, // Export the new function
 };

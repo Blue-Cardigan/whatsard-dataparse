@@ -12,9 +12,10 @@ const openai = new OpenAI({
 
 async function main() {
   const list = await openai.batches.list();
+  const twelveHoursAgo = Math.floor(Date.now() / 1000) - 12 * 60 * 60;
 
   for await (const batch of list) {
-    if (batch.created_at > 1724230885) {
+    if (batch.created_at > twelveHoursAgo) {
       console.log(batch);
     }
   }

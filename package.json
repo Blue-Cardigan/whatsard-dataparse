@@ -20,7 +20,9 @@
     "csv-parser": "^3.0.0",
     "date-fns": "^3.6.0",
     "dotenv": "^16.4.5",
+    "json-schema-to-zod": "^2.4.1",
     "openai": "^4.57.1",
-    "xmldom": "^0.6.0"
+    "xmldom": "^0.6.0",
+    "zod": "^3.23.8"
   }
 }
