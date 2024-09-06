@@ -54,7 +54,6 @@ export async function fetchXMLData(dateString = '', suffix = '', debateType = 'c
     const response = await fetch(url);
     if (!response.ok) {
       if (response.status === 404) {
-        console.log(`No XML data found for ${debateType} at ${url}`);
         return null;
       }
       throw new Error(`HTTP error! status: ${response.status}`);

@@ -29,7 +29,6 @@ async function fetchXMLData(dateString = '', suffix = '', debateType = 'commons'
     }
     const matchingFiles = await getPublicBillFiles(dateString);
     if (matchingFiles.length === 0) {
-      console.log(`No public bill files found for date ${dateString}`);
       return null;
     }
     // If suffix is provided, try to find a matching file
@@ -57,7 +56,6 @@ async function fetchXMLData(dateString = '', suffix = '', debateType = 'commons'
     return response.data;
   } catch (error) {
     if (error.response && error.response.status === 404) {
-      console.log(`No XML data found for ${debateType} at ${url}`);
       return null;
     }
     console.error(`Error fetching XML data: ${error}`);
