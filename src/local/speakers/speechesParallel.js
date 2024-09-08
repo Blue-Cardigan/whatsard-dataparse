@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+const supabase = createClient(process.env.DATABASE_URL, process.env.SERVICE_KEY);
 
 async function updateSpeechesParallel(tableName) {
   let processed = 0;

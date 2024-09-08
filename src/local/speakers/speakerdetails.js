@@ -4,8 +4,8 @@ const fs = require('fs');
 const csv = require('csv-parser');
 const axios = require('axios');
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+const supabaseUrl = process.env.DATABASE_URL;
+const supabaseServiceKey = process.env.SERVICE_KEY;
 
 let supabase = null;
 

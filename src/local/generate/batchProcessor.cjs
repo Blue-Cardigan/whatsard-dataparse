@@ -241,11 +241,12 @@ async function updateDatabase(results, debateType, isRewritten = false) {
       const content = JSON.parse(response.body.choices[0].message.content);
 
       if (!combinedResults[id]) {
-        combinedResults[id] = { analysis: '', labels: { topics: [], tags: [] }, rewritten_speeches: [] };
+        combinedResults[id] = { analysis: '', labels: { topics: [], tags: [] }, rewritten_speeches: [], speechesParallel: [] };
       }
 
       if (isRewritten) {
         combinedResults[id].rewritten_speeches = combinedResults[id].rewritten_speeches.concat(content.speeches);
+        combinedResults[id].speechesParallel = combinedResults[id].speechesParallel.concat(content.speechesParallel || []);
       } else if (type === 'analysis') {
         combinedResults[id].analysis += content.analysis + '\n\n';
       } else if (type === 'labels') {
@@ -261,6 +262,7 @@ async function updateDatabase(results, debateType, isRewritten = false) {
     const updateData = {};
     if (isRewritten) {
       updateData.rewritten_speeches = combinedResults[id].rewritten_speeches;
+      updateData.speeches_parallel = combinedResults[id].speechesParallel.length > 0 ? combinedResults[id].speechesParallel : null;
     } else {
       updateData.analysis = combinedResults[id].analysis.trim();
       updateData.labels = combinedResults[id].labels;
@@ -274,7 +276,7 @@ async function updateDatabase(results, debateType, isRewritten = false) {
     if (error) {
       console.error(`Error updating database for ID ${id} in ${debateType}:`, error);
     } else {
-      console.log(`Updated ${isRewritten ? 'rewritten speeches' : 'analysis and labels'} for debate ID ${id} in ${debateType}`);
+      console.log(`Updated ${isRewritten ? 'rewritten speeches and speeches_parallel' : 'analysis and labels'} for debate ID ${id} in ${debateType}`);
     }
   }
 }

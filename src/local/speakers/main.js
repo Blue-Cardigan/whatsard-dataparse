@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const { extractSpeakers } = require('./parsespeakers');
-const { fetchXMLData } = require('../../supabase/functions/process-debates/fetchandstore/fetchxml');
+const { fetchXMLData } = require('../parse/fetchxml');
 const { format, addDays, parse, isAfter } = require('date-fns');
 
 const supabaseUrl = process.env.DATABASE_URL;
@@ -47,7 +47,7 @@ async function processAndStoreSpeakers(xmlString) {
 async function main(startDateString) {
   try {
     const suffixes = ['a', 'b', 'c', 'd'];
-    const endDate = parse('2024-07-30', 'yyyy-MM-dd', new Date());
+    const endDate = parse('2024-09-07', 'yyyy-MM-dd', new Date());
     let currentDate = parse(startDateString, 'yyyy-MM-dd', new Date());
 
     while (!isAfter(currentDate, endDate)) {
@@ -64,7 +64,7 @@ async function main(startDateString) {
       currentDate = addDays(currentDate, 1);
     }
     
-    console.log('Processing completed for all dates up to 2024-07-30');
+    console.log('Processing completed for all dates up to 2024-09-07');
   } catch (error) {
     console.error('Error:', error);
   }

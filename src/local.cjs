@@ -23,10 +23,10 @@ const nextDay = new Date(new Date(startDate).getTime() + 24 * 60 * 60 * 1000).to
 const tomorrow = getTomorrowDate();
 
 const params = {
-  startDate: startDate,
-  endDate: tomorrow,  // Set to next day to process only one day
+  startDate: '2024-07-01',
+  endDate: '2024-07-14',  // Set to next day to process only one day
   debateType: 'commons,lords,westminster,publicbills',
-  batchSize: 128
+  batchSize: 256
 };
 
 function runScript(scriptName, args) {
