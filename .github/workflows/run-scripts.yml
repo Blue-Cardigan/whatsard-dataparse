@@ -13,5 +13,11 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: '20'
-      - run: npm ci
-      - run: node src/local.cjs
+      - name: Install dependencies
+        run: npm ci
+      - name: Run script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SERVICE_KEY: ${{ secrets.SERVICE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node src/local.cjs
