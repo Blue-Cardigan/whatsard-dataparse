@@ -31,7 +31,15 @@ const params = {
 function runScript(scriptName, args) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(__dirname, scriptName);
-    const process = spawn('node', [scriptPath, ...args]);
+    const childProcess = spawn('node', [scriptPath, ...args], {
+      env: {
+        ...process.env,
+        DATABASE_URL: process.env.DATABASE_URL,
+        SERVICE_KEY: process.env.SERVICE_KEY,
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY
+      },
+      stdio: 'inherit'
+    });
 
     process.stdout.on('data', (data) => {
       console.log(`${scriptName} output: ${data}`);
@@ -40,8 +48,8 @@ function runScript(scriptName, args) {
     process.stderr.on('data', (data) => {
       console.error(`${scriptName} error: ${data}`);
     });
-
-    process.on('close', (code) => {
+    
+    childProcess.on('close', (code) => {
       if (code === 0) {
         console.log(`${scriptName} completed successfully`);
         resolve();
