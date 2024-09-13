@@ -1,7 +1,9 @@
 function extractSquareBrackets(speeches) {
   return speeches.map(speech => {
     const matches = speech.content.match(/\[.*?\]/g) || [];
-    console.log(`matches: ${matches}`);
+    if (matches.length > 0) {
+      console.log(`matches: ${matches}`);
+    }
     return matches.map(match => match.slice(1, -1).trim());
   }).flat();
 }
