@@ -1,5 +1,7 @@
-require('dotenv').config();
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const supabase = createClient(process.env.DATABASE_URL, process.env.SERVICE_KEY);
 
@@ -34,12 +36,12 @@ async function updateSpeechesParallel(tableName) {
       const speechesLength = Array.isArray(debate.speeches) ? debate.speeches.length : 0;
       const rewrittenSpeechesLength = Array.isArray(debate.rewritten_speeches) ? debate.rewritten_speeches.length : 0;
 
-      const speechesParallel = speechesLength === rewrittenSpeechesLength && speechesLength > 0;
+      const speechesparallel = speechesLength === rewrittenSpeechesLength && speechesLength > 0;
 
       // Update the record
       const { error: updateError } = await supabase
         .from(tableName)
-        .update({ speechesParallel })
+        .update({ speechesparallel })
         .eq('id', debate.id);
 
       if (updateError) {
@@ -56,7 +58,7 @@ async function updateSpeechesParallel(tableName) {
 }
 
 async function updateAllTables() {
-  const tables = ['lords', 'westminster', 'publicbills'];
+  const tables = ['commons', 'lords', 'westminster', 'publicbills'];
   
   for (const table of tables) {
     console.log(`Starting to process ${table} table`);

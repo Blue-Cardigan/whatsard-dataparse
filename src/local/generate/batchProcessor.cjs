@@ -238,7 +238,14 @@ async function updateDatabase(results, debateType, isRewritten = false) {
     const { custom_id, response } = result;
     if (response.status_code === 200) {
       const [id, chunk, type] = custom_id.split('_');
-      const content = JSON.parse(response.body.choices[0].message.content);
+      let content;
+      try {
+        content = JSON.parse(response.body.choices[0].message.content);
+      } catch (error) {
+        console.error(`Error parsing JSON for ID ${custom_id}:`, error);
+        console.error('Skipping this result and continuing with the next one');
+        continue; // Skip this result and move to the next one
+      }
 
       if (!combinedResults[id]) {
         combinedResults[id] = { analysis: '', labels: { topics: [], tags: [] }, rewritten_speeches: [], speechesParallel: [] };
@@ -262,21 +269,25 @@ async function updateDatabase(results, debateType, isRewritten = false) {
     const updateData = {};
     if (isRewritten) {
       updateData.rewritten_speeches = combinedResults[id].rewritten_speeches;
-      updateData.speeches_parallel = combinedResults[id].speechesParallel.length > 0 ? combinedResults[id].speechesParallel : null;
+      updateData.speechesparallel = combinedResults[id].speechesParallel.length > 0 ? combinedResults[id].speechesParallel : null;
     } else {
       updateData.analysis = combinedResults[id].analysis.trim();
       updateData.labels = combinedResults[id].labels;
     }
 
-    const { error } = await supabase
-      .from(debateType)
-      .update(updateData)
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from(debateType)
+        .update(updateData)
+        .eq('id', id);
 
-    if (error) {
-      console.error(`Error updating database for ID ${id} in ${debateType}:`, error);
-    } else {
-      console.log(`Updated ${isRewritten ? 'rewritten speeches and speeches_parallel' : 'analysis and labels'} for debate ID ${id} in ${debateType}`);
+      if (error) {
+        console.error(`Error updating database for ID ${id} in ${debateType}:`, error);
+      } else {
+        console.log(`Updated ${isRewritten ? 'rewritten speeches and speechesparallel' : 'analysis and labels'} for debate ID ${id} in ${debateType}`);
+      }
+    } catch (error) {
+      console.error(`Unexpected error updating database for ID ${id} in ${debateType}:`, error);
     }
   }
 }
@@ -327,8 +338,13 @@ async function batchProcessDebates(batchSize, debateTypes, startDate, getPromptF
           return;
         }
         for (const result of results) {
-          const debateType = debateTypesArray.find(type => result.custom_id.startsWith(type));
-          await updateDatabase([result], debateType, true);
+          try {
+            const debateType = debateTypesArray.find(type => result.custom_id.startsWith(type));
+            await updateDatabase([result], debateType, true);
+          } catch (error) {
+            console.error('Error processing individual result:', error);
+            console.error('Problematic result:', result.custom_id);
+          }
         }
         console.log('Batch processing completed successfully');
       } else if (completedBatch.error_file_id) {

@@ -9,7 +9,7 @@ function extractSpeakers(xmlString) {
   function processNode(node) {
     if (node.nodeName === 'speech') {
       const speakerId = node.getAttribute('person_id')?.split('/').pop() || null;
-      const speakerName = node.getAttribute('speakername') || null;
+      const speakerName = node.getAttribute('speakername') || node.getAttribute('name') || null;
       const speakerTitle = node.getAttribute('speakertitle') || null;
 
       if (speakerId && speakerName) {

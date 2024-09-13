@@ -25,14 +25,20 @@ function processLordsXML(xmlString) {
         let headingContent = '';
         let headingType = '';
         
-        headingContent = node.textContent.split('-')[0].trim();
+        // Remove the [HL] tag if it exists
+        const hlMatch = node.textContent.match(/\[HL\]/);
+        if (hlMatch) {
+          headingContent += ' ' + hlMatch[0].trim();
+        }
+        
+        headingContent = node.textContent.split(' -')[0].trim();
         
         const italicTag = node.getElementsByTagName('i')[0];
         if (italicTag) {
           headingType = italicTag.textContent.trim();
         }
         
-        headingContent = headingContent.replace(/[^\w\s]+$/, '').trim();
+        headingContent = headingContent.replace(/[^\w\s\[\]]+$/, '').trim();
         
         currentType = headingType || headingContent;
         

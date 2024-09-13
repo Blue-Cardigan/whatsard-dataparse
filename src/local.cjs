@@ -17,14 +17,13 @@ function getTomorrowDate() {
   return new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 }
 
-// Predefined parameters
-const startDate = getYesterdayDate();
-const nextDay = new Date(new Date(startDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+const firstDay = getYesterdayDate();
+const nextDay = new Date(new Date(firstDay).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 const tomorrow = getTomorrowDate();
 
 const params = {
-  startDate: '2024-07-01',
-  endDate: '2024-07-14',  // Set to next day to process only one day
+  startDate: '2024-09-10',
+  endDate: getTodayDate(),  // Set to next day to process only one day
   debateType: 'commons,lords,westminster,publicbills',
   batchSize: 256
 };
@@ -79,4 +78,11 @@ async function main() {
   }
 }
 
-main();
+if (require.main === module) {
+  main().catch(error => {
+    console.error('An error occurred:', error);
+    process.exit(1);
+  });
+}
+
+module.exports = { main };

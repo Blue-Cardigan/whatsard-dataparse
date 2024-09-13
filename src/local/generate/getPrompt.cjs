@@ -15,10 +15,11 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
     return `
       ###INSTRUCTION###
       Rewrite these speeches from ${chunkText}a UK ${categoryName} ${debateOrDiscussion} in the style of Whatsapp messages. 
-      - Stay true to the original speaker's name and intention.
-      - Keep the messages to-the-point. Remove superfluous phrases including "Thank you" or "I agree".
-      - Use British English spelling.
+      - Stay true to the original speakers' names and intention.
+      - Keep the messages to-the-point. Remove superfluous phrases including "Thank you" or "I agree". 
       - Use markdown to highlight key data and arguments using bold, italics, and bullet points.
+      - Highlight key phrases in bold.
+      - Use British English spelling.
       - Use a serious tone for serious topics, such as violence or extreme poverty.
       - Use a light tone with one or two emojis if the topic is a light topic.
       

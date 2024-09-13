@@ -1,0 +1,148 @@
+{
+  "cabinet": [
+    {
+      "name": "Angela Rayner",
+      "title": "Secretary of State",
+      "department": "Ministry of Housing, Communities and Local Government",
+      "ministerial_ranking": 1
+    },
+    {
+      "name": "Rachel Reeves",
+      "title": "Chancellor of the Exchequer",
+      "department": "HM Treasury",
+      "ministerial_ranking": 2
+    },
+    {
+      "name": "Yvette Cooper",
+      "title": "Home Secretary",
+      "department": "Home Office",
+      "ministerial_ranking": 3
+    },
+    {
+      "name": "Ed Miliband",
+      "title": "Secretary of State",
+      "department": "Department for Energy Security and Net Zero",
+      "ministerial_ranking": 4
+    },
+    {
+      "name": "David Lammy",
+      "title": "Foreign Secretary",
+      "department": "Foreign, Commonwealth and Development Office",
+      "ministerial_ranking": 5
+    },
+    {
+      "name": "Pat McFadden",
+      "title": "Chancellor of the Duchy of Lancaster",
+      "department": "Cabinet Office",
+      "ministerial_ranking": 6
+    },
+    {
+      "name": "Shabana Mahmood",
+      "title": "Lord Chancellor and Secretary of State",
+      "department": "Ministry of Justice",
+      "ministerial_ranking": 7
+    },
+    {
+      "name": "Wes Streeting",
+      "title": "Secretary of State",
+      "department": "Department of Health and Social Care",
+      "ministerial_ranking": 8
+    },
+    {
+      "name": "Jonathan Reynolds",
+      "title": "Secretary of State, President of the Board of Trade",
+      "department": "Department for Business and Trade, UK Export Finance",
+      "ministerial_ranking": 9
+    },
+    {
+      "name": "Liz Kendall",
+      "title": "Secretary of State",
+      "department": "Department for Work and Pensions",
+      "ministerial_ranking": 10
+    },
+    {
+      "name": "John Healey",
+      "title": "Secretary of State",
+      "department": "Ministry of Defence",
+      "ministerial_ranking": 11
+    },
+    {
+      "name": "Louise Haigh",
+      "title": "Secretary of State",
+      "department": "Department for Transport",
+      "ministerial_ranking": 12
+    },
+    {
+      "name": "Peter Kyle",
+      "title": "Secretary of State",
+      "department": "Department for Science, Innovation and Technology",
+      "ministerial_ranking": 13
+    },
+    {
+      "name": "Hilary Benn",
+      "title": "Secretary of State",
+      "department": "Northern Ireland Office",
+      "ministerial_ranking": 15
+    },
+    {
+      "name": "Ian Murray",
+      "title": "Secretary of State",
+      "department": "Scotland Office",
+      "ministerial_ranking": 16
+    },
+    {
+      "name": "Bridget Phillipson",
+      "title": "Secretary of State",
+      "department": "Department for Education",
+      "ministerial_ranking": 17
+    },
+    {
+      "name": "Lord Hermer",
+      "title": "Attorney General",
+      "department": "Attorney General's Office",
+      "ministerial_ranking": 18
+    },
+    {
+      "name": "Lisa Nandy",
+      "title": "Secretary of State",
+      "department": "Department for Culture, Media and Sport",
+      "ministerial_ranking": 19
+    },
+    {
+      "name": "Sir Alan Campbell",
+      "title": "Parliamentary Secretary to the Treasury (Chief Whip)",
+      "department": "HM Treasury",
+      "ministerial_ranking": 20
+    },
+    {
+      "name": "Darren Jones",
+      "title": "Chief Secretary to the Treasury",
+      "department": "HM Treasury",
+      "ministerial_ranking": 21
+    },
+    {
+      "name": "Baroness Smith of Basildon",
+      "title": "Leader of the House of Lords and Lord Privy Seal",
+      "department": "Office of the Leader of the House of Lords",
+      "ministerial_ranking": 22
+    },
+    {
+      "name": "Lucy Powell",
+      "title": "Lord President of the Council and Leader of the House of Commons",
+      "department": "Office of the Leader of the House of Commons",
+      "ministerial_ranking": 23
+    },
+    {
+      "name": "Jo Stevens",
+      "title": "Secretary of State",
+      "department": "Wales Office",
+      "ministerial_ranking": 24
+    },
+    {
+      "name": "Steve Reed",
+      "title": "Secretary of State",
+      "department": "Department for Environment, Food and Rural Affairs",
+      "ministerial_ranking": 25
+    }
+  ]
+}
