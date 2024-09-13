@@ -1,14 +1,17 @@
 .env
 *.xml
-/supabase/functions/process-debates/lib/gptfutz/
 *.jsonl
-/node_modules/
-/.vscode/
-/public/
-/dist/
-/build/
-/coverage/
-/logs/
+
+src/futz/*.csv
+
+# node_modules/
+node_modules/
+.vscode/
+public/
+dist/
+build/
+coverage/
+logs/
 /tmp/
-/cache/
+cache/
 supabase/
