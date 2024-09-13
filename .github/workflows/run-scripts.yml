@@ -20,4 +20,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SERVICE_KEY: ${{ secrets.SERVICE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: node src/local.cjs
+        run: |
+          echo "DATABASE_URL: $DATABASE_URL"
+          echo "SERVICE_KEY: $SERVICE_KEY"
+          echo "OPENAI_API_KEY: $OPENAI_API_KEY"
+          node src/local.cjs
