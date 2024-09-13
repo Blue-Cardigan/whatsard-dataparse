@@ -2,7 +2,7 @@ name: Run Scripts
 
 on:
   schedule:
-    - cron: '30 6 * * *'  # Run daily at 6.30 am
+    - cron: '30 6 * * 2-6'  # Run on weekdays at 6.30 am
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
