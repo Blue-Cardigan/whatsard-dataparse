@@ -31,11 +31,6 @@ const params = {
 function runScript(scriptName, args) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(__dirname, scriptName);
-    console.log('Environment variables:', {
-      DATABASE_URL: process.env.DATABASE_URL ? 'Set' : 'Not set',
-      SERVICE_KEY: process.env.SERVICE_KEY ? 'Set' : 'Not set',
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? 'Set' : 'Not set'
-    });
     const childProcess = spawn('node', [scriptPath, ...args], {
       env: {
         ...process.env,
@@ -68,6 +63,11 @@ function runScript(scriptName, args) {
 async function main() {
   try {
     console.log(`Processing for date: ${params.startDate}`);
+    console.log('Environment variables:', {
+      DATABASE_URL: process.env.DATABASE_URL ? 'Set' : 'Not set',
+      SERVICE_KEY: process.env.SERVICE_KEY ? 'Set' : 'Not set',
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? 'Set' : 'Not set'
+    });
 
     console.log('Starting parse process...');
     await runScript('local/parse.cjs', [
