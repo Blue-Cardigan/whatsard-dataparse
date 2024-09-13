@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const { format, addDays, parse, isAfter, isBefore, isValid } = require('date-fns');
 
 // Function to get today's date in YYYY-MM-DD format
 function getYesterdayDate() {
@@ -38,23 +39,28 @@ function runScript(scriptName, args) {
         SERVICE_KEY: process.env.SERVICE_KEY,
         OPENAI_API_KEY: process.env.OPENAI_API_KEY
       },
-      stdio: 'pipe'  // Change this from 'inherit' to 'pipe'
+      stdio: 'pipe'
     });
+
+    let output = '';
 
     childProcess.stdout.on('data', (data) => {
       console.log(`${scriptName} output: ${data}`);
+      output += data;
     });
 
     childProcess.stderr.on('data', (data) => {
       console.error(`${scriptName} error: ${data}`);
+      output += data;
     });
     
     childProcess.on('close', (code) => {
       if (code === 0) {
         console.log(`${scriptName} completed successfully`);
-        resolve();
+        resolve({ success: true, output });
       } else {
-        reject(new Error(`${scriptName} exited with code ${code}`));
+        console.error(`${scriptName} exited with code ${code}`);
+        resolve({ success: false, output });
       }
     });
   });
@@ -89,8 +95,43 @@ async function processDebateType(startDate, endDate, debateType, suffix) {
   }
 }
 
+function parseArguments(args) {
+  const parsedArgs = {
+    debateType: ['commons', 'lords', 'westminster', 'publicbills'],
+    startDate: format(new Date(), 'yyyy-MM-dd'),
+    endDate: null,
+    suffix: null
+  };
+
+  args.forEach(arg => {
+    const [key, value] = arg.split('=');
+    if (key === 'debateType') {
+      parsedArgs.debateType = value.split(',').filter(type => 
+        ['commons', 'lords', 'westminster', 'publicbills'].includes(type)
+      );
+    } else if (key === 'startDate' || key === 'endDate') {
+      const dateMatch = value.match(/^(\d{4}-\d{2}-\d{2})([a-d])?$/);
+      if (dateMatch) {
+        const date = parse(dateMatch[1], 'yyyy-MM-dd', new Date());
+        if (isValid(date)) {
+          parsedArgs[key] = dateMatch[1];
+          if (key === 'startDate' && dateMatch[2]) {
+            parsedArgs.suffix = dateMatch[2];
+          }
+        } else {
+          console.warn(`Invalid date for ${key}: ${value}. Using default or ignoring.`);
+        }
+      } else {
+        console.warn(`Invalid date format for ${key}: ${value}. Using default or ignoring.`);
+      }
+    }
+  });
+
+  return parsedArgs;
+}
+
 async function main(args) {
-  const { debateType, startDate, endDate, suffix } = parseArguments(args);
+  const { debateType, startDate, endDate } = parseArguments(args);
 
   if (debateType.length === 0) {
     console.error('No valid debate types specified. Please use "commons", "lords", "westminster", or "publicbills"');
@@ -105,29 +146,46 @@ async function main(args) {
     console.log('Processing for a single date');
   }
 
-  const results = {};
-  for (const type of debateType) {
-    const xmlFound = await processDebateType(startDate, endDate, type, suffix);
-    results[type] = xmlFound;
+  console.log('Starting parse process...');
+  const parseResult = await runScript('local/parse.cjs', [
+    `startDate=${startDate}`,
+    `endDate=${endDate || startDate}`,
+    `debateType=${debateType.join(',')}`
+  ]);
+
+  if (!parseResult.success) {
+    console.error('Parse process failed');
+    process.exit(1);
   }
 
-  const missingTypes = Object.entries(results)
-    .filter(([type, found]) => (type === 'commons' || type === 'lords') && !found)
-    .map(([type]) => type);
-
-  if (missingTypes.length > 0) {
-    console.log(`No XML files found for: ${missingTypes.join(', ')}. Exiting with status code 1.`);
+  const missingTypes = parseResult.output.match(/No XML files found for: (.+?)\./);
+  if (missingTypes) {
+    console.log(`No XML files found for: ${missingTypes[1]}. Exiting with status code 1.`);
     process.exit(1);
-  } else {
-    console.log('All processes completed successfully.');
   }
+
+  console.log('Starting generate process...');
+  const generateResult = await runScript('local/generate.cjs', [
+    `startDate=${startDate}`,
+    `endDate=${endDate || startDate}`,
+    `debateType=${debateType.join(',')}`,
+    `batchSize=256`
+  ]);
+
+  if (!generateResult.success) {
+    console.error('Generate process failed');
+    process.exit(1);
+  }
+
+  console.log('All processes completed successfully.');
 }
 
-if (require.main === module) {
-  main().catch(error => {
-    console.error('An error occurred:', error);
-    process.exit(1);
-  });
-}
+// Use process.argv.slice(2) to get command line arguments
+const args = process.argv.slice(2);
+
+main(args).catch(error => {
+  console.error('An error occurred:', error);
+  process.exit(1);
+});
 
 module.exports = { main };
