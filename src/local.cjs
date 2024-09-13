@@ -40,7 +40,7 @@ function runScript(scriptName, args) {
       },
       stdio: 'inherit'
     });
-    console.log(`Spawning process ${childProcess}`);
+    console.log(process.env);
 
     process.stdout.on('data', (data) => {
       console.log(`${scriptName} output: ${data}`);
