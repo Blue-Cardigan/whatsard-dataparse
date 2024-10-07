@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
-const { format, addDays, parse, isAfter, isBefore, isValid } = require('date-fns');
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config();
 
 // Function to get today's date in YYYY-MM-DD format
 function getYesterdayDate() {
@@ -13,18 +14,88 @@ function getTodayDate() {
   return today.toISOString().split('T')[0];
 }
 
-function getTomorrowDate() {
-  const today = new Date();
-  return new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+const recessDates = [
+  // Summer recess 2024
+  '2024-07-30', '2024-07-31', 
+  '2024-08-01', '2024-08-02', '2024-08-03', '2024-08-04', '2024-08-05', '2024-08-06', '2024-08-07', '2024-08-08', '2024-08-09', '2024-08-10', '2024-08-11', '2024-08-12', '2024-08-13', '2024-08-14', '2024-08-15', '2024-08-16', '2024-08-17', '2024-08-18', '2024-08-19', '2024-08-20', '2024-08-21', '2024-08-22', '2024-08-23', '2024-08-24', '2024-08-25', '2024-08-26', '2024-08-27', '2024-08-28', '2024-08-29', '2024-08-30', '2024-08-31', 
+  '2024-09-01',
+  // Conference recess 2024
+  '2024-09-12', '2024-09-13', '2024-09-14', '2024-09-15', '2024-09-16', '2024-09-17', '2024-09-18', '2024-09-19', '2024-09-20', '2024-09-21', '2024-09-22', '2024-09-23', '2024-09-24', '2024-09-25', '2024-09-26', '2024-09-27', '2024-09-28', '2024-09-29', '2024-09-30', 
+  '2024-10-01', '2024-10-02', '2024-10-03', '2024-10-04', '2024-10-05', '2024-10-06',
+  // Autumn recess 2024
+  '2024-11-06', '2024-11-07', '2024-11-08', '2024-11-09', '2024-11-10',
+  // Christmas recess 2024-2025
+  '2024-12-19', '2024-12-20', '2024-12-21', '2024-12-22', '2024-12-23', '2024-12-24', '2024-12-25', '2024-12-26', '2024-12-27', '2024-12-28', '2024-12-29', '2024-12-30', '2024-12-31', 
+  '2025-01-01', '2025-01-02', '2025-01-03', '2025-01-04', '2025-01-05',
+  // February recess 2025
+  '2025-02-13', '2025-02-14', '2025-02-15', '2025-02-16', '2025-02-17', '2025-02-18', '2025-02-19', '2025-02-20', '2025-02-21', '2025-02-22', '2025-02-23',
+  // Easter recess 2025
+  '2025-04-03', '2025-04-04', '2025-04-05', '2025-04-06', '2025-04-07', '2025-04-08', '2025-04-09', '2025-04-10', '2025-04-11', '2025-04-12', '2025-04-13', '2025-04-14', '2025-04-15', '2025-04-16', '2025-04-17', '2025-04-18', '2025-04-19', '2025-04-20', '2025-04-21',
+  // Whitsun recess 2025
+  '2025-05-22', '2025-05-23', '2025-05-24', '2025-05-25', '2025-05-26', '2025-05-27', '2025-05-28', '2025-05-29', '2025-05-30', '2025-05-31', '2025-06-01',
+  // Summer recess 2025
+  '2025-07-22', '2025-07-23', '2025-07-24', '2025-07-25', '2025-07-26', '2025-07-27', '2025-07-28', '2025-07-29', '2025-07-30', '2025-07-31', 
+  '2025-08-01', '2025-08-02', '2025-08-03', '2025-08-04', '2025-08-05', '2025-08-06', '2025-08-07', '2025-08-08', '2025-08-09', '2025-08-10', '2025-08-11', '2025-08-12', '2025-08-13', '2025-08-14', '2025-08-15', '2025-08-16', '2025-08-17', '2025-08-18', '2025-08-19', '2025-08-20', '2025-08-21', '2025-08-22', '2025-08-23', '2025-08-24', '2025-08-25', '2025-08-26', '2025-08-27', '2025-08-28', '2025-08-29', '2025-08-30', '2025-08-31'
+];
+
+function isWorkingDay(dateString) {
+  const date = new Date(dateString);
+  const dayOfWeek = date.getDay();
+  return dayOfWeek !== 0 && dayOfWeek !== 6 && !recessDates.includes(dateString);
 }
 
-const firstDay = getYesterdayDate();
-const nextDay = new Date(new Date(firstDay).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-const tomorrow = getTomorrowDate();
+function getNextWorkingDay(dateString) {
+  let nextDate = new Date(dateString);
+  do {
+    nextDate.setDate(nextDate.getDate() + 1);
+    const nextDateString = nextDate.toISOString().split('T')[0];
+    if (isWorkingDay(nextDateString)) {
+      return nextDateString;
+    }
+  } while (true);
+}
+
+async function getMostRecentDate() {
+  const supabase = createClient(process.env.DATABASE_URL, process.env.SERVICE_KEY);
+  const tables = ['commons', 'lords', 'westminster', 'publicbills'];
+  let mostRecentDate = null;
+
+  for (const table of tables) {
+    const { data, error } = await supabase
+      .from(table)
+      .select('id')
+      .order('id', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error(`Error fetching from ${table}:`, error);
+      continue;
+    }
+
+    if (data && data.length > 0) {
+      const id = data[0].id;
+      const match = id.match(/\d{4}-\d{2}-\d{2}/);
+      if (match) {
+        const tableDate = match[0];
+        if (!mostRecentDate || tableDate > mostRecentDate) {
+          mostRecentDate = tableDate;
+        }
+      }
+    }
+  }
+
+  if (!mostRecentDate) {
+    console.warn('No recent date found, using yesterday as default');
+    return getNextWorkingDay(getYesterdayDate());
+  }
+
+  // Return the next working day after the most recent date
+  return getNextWorkingDay(mostRecentDate);
+}
 
 const params = {
-  startDate: getTodayDate(),
-  endDate: getTomorrowDate(),  // Set to next day to process only one day
+  startDate: null,  // Will be set in main function
+  endDate: getTodayDate(),
   debateType: 'commons,lords,westminster,publicbills',
   batchSize: 256
 };
@@ -32,160 +103,61 @@ const params = {
 function runScript(scriptName, args) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(__dirname, scriptName);
-    const childProcess = spawn('node', [scriptPath, ...args], {
-      env: {
-        ...process.env,
-        DATABASE_URL: process.env.DATABASE_URL,
-        SERVICE_KEY: process.env.SERVICE_KEY,
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY
-      },
-      stdio: 'pipe'
-    });
+    const process = spawn('node', [scriptPath, ...args]);
 
-    let output = '';
-
-    childProcess.stdout.on('data', (data) => {
+    process.stdout.on('data', (data) => {
       console.log(`${scriptName} output: ${data}`);
-      output += data;
     });
 
-    childProcess.stderr.on('data', (data) => {
+    process.stderr.on('data', (data) => {
       console.error(`${scriptName} error: ${data}`);
-      output += data;
     });
-    
-    childProcess.on('close', (code) => {
+
+    process.on('close', (code) => {
       if (code === 0) {
         console.log(`${scriptName} completed successfully`);
-        resolve({ success: true, output });
+        resolve();
       } else {
-        console.error(`${scriptName} exited with code ${code}`);
-        resolve({ success: false, output });
+        reject(new Error(`${scriptName} exited with code ${code}`));
       }
     });
   });
 }
 
-async function processDebateType(startDate, endDate, debateType, suffix) {
+async function main() {
   try {
-    let xmlFound = false;
-    while (!isAfter(currentDate, endDateDate)) {
-      const formattedDate = format(currentDate, 'yyyy-MM-dd');
-      
-      for (const suffix of suffixes) {
-        const xmlString = await fetchXMLData(formattedDate, suffix, debateType);
-        if (xmlString) {
-          await processAndStoreData(xmlString, formattedDate, suffix, debateType);
-          xmlFound = true;
-        }
-      }
-      
-      if (xmlFound) {
-        console.log(`${debateType} data for ${formattedDate} processed and stored`);
-      } else {
-        console.log(`No ${debateType} data found for ${formattedDate}`);
-      }
-      currentDate = addDays(currentDate, 1);
-    }
-    
-    return xmlFound;
+    // Set the start date to the day after the most recent date in the database
+    params.startDate = await getMostRecentDate();
+
+    console.log(`Processing from date: ${params.startDate} to ${params.endDate}`);
+
+    console.log('Starting parse process...');
+    await runScript('local/parse.cjs', [
+      `startDate=${params.startDate}`,
+      `endDate=${params.endDate}`,
+      `debateType=${params.debateType}`
+    ]);
+
+    console.log('Starting generate process...');
+    await runScript('local/generate.cjs', [
+      `startDate=${params.startDate}`,
+      `endDate=${params.endDate}`,
+      `debateType=${params.debateType}`,
+      `batchSize=${params.batchSize}`
+    ]);
+
+    console.log('All processes completed successfully.');
   } catch (error) {
-    console.error(`Error processing ${debateType}:`, error);
-    return false;
+    console.error('An error occurred:', error);
+    process.exit(1);
   }
 }
 
-function parseArguments(args) {
-  const parsedArgs = {
-    debateType: ['commons', 'lords', 'westminster', 'publicbills'],
-    startDate: format(new Date(), 'yyyy-MM-dd'),
-    endDate: null,
-    suffix: null
-  };
-
-  args.forEach(arg => {
-    const [key, value] = arg.split('=');
-    if (key === 'debateType') {
-      parsedArgs.debateType = value.split(',').filter(type => 
-        ['commons', 'lords', 'westminster', 'publicbills'].includes(type)
-      );
-    } else if (key === 'startDate' || key === 'endDate') {
-      const dateMatch = value.match(/^(\d{4}-\d{2}-\d{2})([a-d])?$/);
-      if (dateMatch) {
-        const date = parse(dateMatch[1], 'yyyy-MM-dd', new Date());
-        if (isValid(date)) {
-          parsedArgs[key] = dateMatch[1];
-          if (key === 'startDate' && dateMatch[2]) {
-            parsedArgs.suffix = dateMatch[2];
-          }
-        } else {
-          console.warn(`Invalid date for ${key}: ${value}. Using default or ignoring.`);
-        }
-      } else {
-        console.warn(`Invalid date format for ${key}: ${value}. Using default or ignoring.`);
-      }
-    }
+if (require.main === module) {
+  main().catch(error => {
+    console.error('An error occurred:', error);
+    process.exit(1);
   });
-
-  return parsedArgs;
 }
-
-async function main(args) {
-  const { debateType, startDate, endDate } = parseArguments(args);
-
-  if (debateType.length === 0) {
-    console.error('No valid debate types specified. Please use "commons", "lords", "westminster", or "publicbills"');
-    process.exit(1);
-  }
-
-  console.log(`Processing debate types: ${debateType.join(', ')}`);
-  console.log(`Starting from date: ${startDate}`);
-  if (endDate) {
-    console.log(`Ending at date: ${endDate}`);
-  } else {
-    console.log('Processing for a single date');
-  }
-
-  console.log('Starting parse process...');
-  const parseResult = await runScript('local/parse.cjs', [
-    `startDate=${startDate}`,
-    `endDate=${endDate || startDate}`,
-    `debateType=${debateType.join(',')}`
-  ]);
-
-  if (!parseResult.success) {
-    console.error('Parse process failed');
-    process.exit(1);
-  }
-
-  const missingTypes = parseResult.output.match(/No XML files found for: (.+?)\./);
-  if (missingTypes) {
-    console.log(`No XML files found for: ${missingTypes[1]}. Exiting with status code 1.`);
-    process.exit(1);
-  }
-
-  console.log('Starting generate process...');
-  const generateResult = await runScript('local/generate.cjs', [
-    `startDate=${startDate}`,
-    `endDate=${endDate || startDate}`,
-    `debateType=${debateType.join(',')}`,
-    `batchSize=256`
-  ]);
-
-  if (!generateResult.success) {
-    console.error('Generate process failed');
-    process.exit(1);
-  }
-
-  console.log('All processes completed successfully.');
-}
-
-// Use process.argv.slice(2) to get command line arguments
-const args = process.argv.slice(2);
-
-main(args).catch(error => {
-  console.error('An error occurred:', error);
-  process.exit(1);
-});
 
 module.exports = { main };

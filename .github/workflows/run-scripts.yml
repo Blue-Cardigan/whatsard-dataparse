@@ -2,7 +2,7 @@ name: Run Scripts
 
 on:
   schedule:
-    - cron: '20 6 * * 2-6'  # Run on weekdays at 6.30 am
+    - cron: '30 6 * * 2-6'  # Run on weekdays at 6.30 am
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
@@ -15,36 +15,14 @@ jobs:
           node-version: '20'
       - name: Install dependencies
         run: npm ci
-      - name: Create env file
+      - name: create env file
         run: |
           touch .env
           echo DATABASE_URL=${{ secrets.DATABASE_URL }} >> .env
           echo SERVICE_KEY=${{ secrets.SERVICE_KEY }} >> .env
           echo OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} >> .env
-      - name: Run scripts with retry
+          node src/local.cjs
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SERVICE_KEY: ${{ secrets.SERVICE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          for i in {1..8}; do
-            output=$(node src/local.cjs)
-            exit_code=$?
-            echo "$output"
-            if [ $exit_code -eq 0 ]; then
-              echo "All scripts ran successfully"
-              exit 0
-            elif [ $exit_code -eq 1 ]; then
-              missing_types=$(echo "$output" | grep "No XML files found for:" | sed 's/.*No XML files found for: //')
-              echo "No XML file returned for: $missing_types. Retrying in 1 hour..."
-              if [ $i -lt 8 ]; then
-                sleep 3600
-              else
-                echo "Max retries reached. Exiting with failure."
-                exit 1
-              fi
-            else
-              echo "An unexpected error occurred. Exiting."
-              exit $exit_code
-            fi
-          done
