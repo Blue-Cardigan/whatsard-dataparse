@@ -40,9 +40,9 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
   } else if (type === 'analysis') {
     return `
       ###INSTRUCTIONS###
-      Analyze ${chunkText}this current UK ${categoryName} ${debateOrDiscussion} in 100 words or less.
+      Analyse ${chunkText}this current UK ${categoryName} ${debateOrDiscussion} in 100 words or less.
       Use British English spelling.
-      Focus on both key characteristics and content, and the stances of the main contributors.
+      Focus on key characteristics, content, the stances of the main contributors, and commitments to action.
       Structure your response as JSON:
 
       {"analysis": "text"}
@@ -51,7 +51,7 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
   } else if (type === 'labels') {
     return `
     ###INSTRUCTIONS###
-    Analyze ${chunkText}this UK ${categoryName} ${debateOrDiscussion} then provide up to 5 topics and up to 10 tags to use as metadata.
+    Analyse ${chunkText}this UK ${categoryName} ${debateOrDiscussion} then provide up to 5 topics and up to 10 tags to use as metadata.
     Use British English spelling. 
 
     #Select Topics From this List Only#
@@ -66,7 +66,7 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
     #
     
     #Tags
-      Identify subtopics within the selected topics. 
+      Identify subtopics within selected topics. 
       Avoid overlapping tags such as "recall petition" and "petition officer"
       Avoid broad tags like "Parliamentary debate" or "Official Report".
     #
