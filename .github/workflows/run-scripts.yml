@@ -2,7 +2,7 @@ name: Run Scripts
 
 on:
   schedule:
-    - cron: '25 6,12 * * 2-6'  # Run on weekdays at 6.30 am
+    - cron: '25 6,7,8,9,10,11,12 * * 2-6'  # Run on weekdays at 6:25, 7:25, 8:25, 9:25, 10:25, 11:25, and 12:25
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
@@ -21,7 +21,8 @@ jobs:
           echo DATABASE_URL=${{ secrets.DATABASE_URL }} >> .env
           echo SERVICE_KEY=${{ secrets.SERVICE_KEY }} >> .env
           echo OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} >> .env
-          node src/local.cjs
+      - name: Run scripts
+        run: node src/local.cjs
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SERVICE_KEY: ${{ secrets.SERVICE_KEY }}

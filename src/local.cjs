@@ -105,7 +105,10 @@ function runScript(scriptName, args) {
     const scriptPath = path.join(__dirname, scriptName);
     const process = spawn('node', [scriptPath, ...args]);
 
+    let output = '';
+
     process.stdout.on('data', (data) => {
+      output += data.toString();
       console.log(`${scriptName} output: ${data}`);
     });
 
@@ -116,7 +119,7 @@ function runScript(scriptName, args) {
     process.on('close', (code) => {
       if (code === 0) {
         console.log(`${scriptName} completed successfully`);
-        resolve();
+        resolve(output);
       } else {
         reject(new Error(`${scriptName} exited with code ${code}`));
       }
@@ -132,21 +135,28 @@ async function main() {
     console.log(`Processing from date: ${params.startDate} to ${params.endDate}`);
 
     console.log('Starting parse process...');
-    await runScript('local/parse.cjs', [
+    const parseOutput = await runScript('local/parse.cjs', [
       `startDate=${params.startDate}`,
       `endDate=${params.endDate}`,
       `debateType=${params.debateType}`
     ]);
 
-    console.log('Starting generate process...');
-    await runScript('local/generate.cjs', [
-      `startDate=${params.startDate}`,
-      `endDate=${params.endDate}`,
-      `debateType=${params.debateType}`,
-      `batchSize=${params.batchSize}`
-    ]);
+    // Check if any debates were retrieved
+    const debatesRetrieved = parseOutput.includes('successfully stored in Supabase');
 
-    console.log('All processes completed successfully.');
+    if (debatesRetrieved) {
+      console.log('Starting generate process...');
+      await runScript('local/generate.cjs', [
+        `startDate=${params.startDate}`,
+        `endDate=${params.endDate}`,
+        `debateType=${params.debateType}`,
+        `batchSize=${params.batchSize}`
+      ]);
+
+      console.log('All processes completed successfully.');
+    } else {
+      console.log('No debates retrieved. Skipping generate process.');
+    }
   } catch (error) {
     console.error('An error occurred:', error);
     process.exit(1);
