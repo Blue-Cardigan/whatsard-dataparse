@@ -43,6 +43,7 @@ function renameTypeToSubtitle(debates) {
 
 
 function adjustDebateTypes(debates) {
+  debates = renameTypeToSubtitle(debates);
   let currentSubtitle = '';
   let currentPrepend = '';
   let isFirstRow = true;
@@ -74,6 +75,9 @@ function adjustDebateTypes(debates) {
 
 function categoriseDebate(debate, debateType) {
   if (debateType !== 'publicbills') {
+    if (debate.title && debate.title.startsWith('Petition - ')) {
+      return 'Petitions';
+    }
     if ((debate.speeches && debate.speeches.length === 1) || 
         (debate.speaker_ids && debate.speaker_ids.length === 1)) {
       return 'Administration';
@@ -89,9 +93,6 @@ function categoriseDebate(debate, debateType) {
     }
     if (debate.subtitle && debate.subtitle.includes('was asked—')) {
       return 'Oral Answers to Questions';
-    }
-    if (debate.title && debate.title.startsWith('Petition - ')) {
-      return 'Petitions';
     }
   }
 
