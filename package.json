@@ -20,6 +20,7 @@
     "cheerio": "^1.0.0",
     "csv-parser": "^3.0.0",
     "date-fns": "^3.6.0",
+    "define-property": "^2.0.2",
     "dotenv": "^16.4.5",
     "json-schema-to-zod": "^2.4.1",
     "moment": "^2.30.1",
