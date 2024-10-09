@@ -31,8 +31,19 @@ function initSupabase(supabaseUrl, supabaseServiceKey) {
   }
 }
 
+//rename debate.type to debate.subtitle
+function renameTypeToSubtitle(debates) {
+  return debates.map(debate => {
+    const newDebate = { ...debate };
+    newDebate.subtitle = newDebate.type;
+    delete newDebate.type;
+    return newDebate;
+  });
+}
+
+
 function adjustDebateTypes(debates) {
-  let currentType = '';
+  let currentSubtitle = '';
   let currentPrepend = '';
   let isFirstRow = true;
 
@@ -41,24 +52,68 @@ function adjustDebateTypes(debates) {
       if (isFirstRow) {
         // Remove this row by not including it in the filtered result
         currentPrepend = debate.speeches[0].content.trim() + ' ';
-        currentType = debate.type;
+        currentSubtitle = debate.subtitle;
         isFirstRow = false;
         return false; // This row will be removed
       } else {
         // For non-first rows, apply the prepend
-        debate.type = currentPrepend;
+        debate.subtitle = currentPrepend;
       }
-    } else if (debate.type === currentType && !isFirstRow) {
-      // Apply prepend to subsequent rows of the same type
-      debate.type = currentPrepend;
+    } else if (debate.subtitle === currentSubtitle && !isFirstRow) {
+      // Apply prepend to subsequent rows of the same subtitle
+      debate.subtitle = currentPrepend;
     } else {
-      // Reset when type changes
-      currentType = debate.type;
+      // Reset when subtitle changes
+      currentSubtitle = debate.subtitle;
       currentPrepend = '';
       isFirstRow = true;
     }
     return true; // Keep this row
   });
+}
+
+function categoriseDebate(debate, debateType) {
+  if (debateType !== 'publicbills') {
+    if ((debate.speeches && debate.speeches.length === 1) || 
+        (debate.speaker_ids && debate.speaker_ids.length === 1)) {
+      return 'Administration';
+    }
+  }
+
+  if (debateType === 'commons') {
+    if (debate.title && (debate.title.includes('Bill') || debate.title.toLowerCase().includes('royal assent') || debate.title.includes('Act'))) {
+      return 'Bills & Legislation';
+    }
+    if (debate.title && ['Point of Order', 'Prayers', 'Business of the House'].some(phrase => debate.title.includes(phrase))) {
+      return 'Administration';
+    }
+    if (debate.subtitle && debate.subtitle.includes('was asked—')) {
+      return 'Oral Answers to Questions';
+    }
+    if (debate.title && debate.title.startsWith('Petition - ')) {
+      return 'Petitions';
+    }
+  }
+
+  if (debateType === 'lords') {
+    if (debate.subtitle && (debate.title.includes('[HL]') || debate.title.includes('Amendment'))) {
+      return 'Bills & Legislation';
+    }
+    if (debate.subtitle && debate.subtitle.includes('Motion')) {
+      return 'Motions';
+    }
+    if (debate.subtitle && debate.subtitle.includes('Question')) {
+      return 'Questions';
+    }
+    if (debate.subtitle && debate.subtitle.includes('Statement')) {
+      return 'Statements';
+    }
+    if (debate.subtitle && debate.subtitle.includes('Report')) {
+      return 'Reports';
+    }
+  }
+
+  return 'Main';
 }
 
 async function storeDataInSupabase(debates, debateType) {
@@ -82,8 +137,14 @@ async function storeDataInSupabase(debates, debateType) {
   // Generate extracts
   const debatesWithExtracts = generateExtracts(cleanedDebates);
 
-  const debateChunks = Array.from({ length: Math.ceil(debatesWithExtracts.length / 100) }, (_, i) =>
-    debatesWithExtracts.slice(i * 100, (i + 1) * 100)
+  // Categorise debates
+  const categorisedDebates = debatesWithExtracts.map(debate => ({
+    ...debate,
+    category: categoriseDebate(debate, debateType)
+  }));
+
+  const debateChunks = Array.from({ length: Math.ceil(categorisedDebates.length / 100) }, (_, i) =>
+    categorisedDebates.slice(i * 100, (i + 1) * 100)
   );
 
   for (const chunk of debateChunks) {
@@ -91,11 +152,13 @@ async function storeDataInSupabase(debates, debateType) {
     const upsertData = chunk.map(debate => {
       const upsertRow = {
         id: debate.id,
+        category: debate.category
       };
 
       // Only include non-null and non-undefined values
       if (debate.title !== null && debate.title !== undefined) upsertRow.title = debate.title;
-      if (debate.type !== null && debate.type !== undefined) upsertRow.type = debate.type;
+      if (debate.subtitle !== null && debate.subtitle !== undefined) upsertRow.subtitle = debate.subtitle;
+      if (debate.category !== null && debate.category !== undefined) upsertRow.category = debate.category;
       if (debate.speaker_ids !== null && debate.speaker_ids !== undefined) upsertRow.speaker_ids = debate.speaker_ids;
       if (debate.speaker_names !== null && debate.speaker_names !== undefined) upsertRow.speaker_names = debate.speaker_names;
       if (debate.speeches !== null && debate.speeches !== undefined) upsertRow.speeches = debate.speeches;
@@ -120,7 +183,7 @@ async function storeDataInSupabase(debates, debateType) {
     }
   }
 
-  console.log(`Stored or updated ${debatesWithExtracts.length} valid debates out of ${debates.length} total debates in ${debateType} table.`);
+  console.log(`Stored or updated ${categorisedDebates.length} valid debates out of ${debates.length} total debates in ${debateType} table.`);
 }
 
 async function processAndStoreData(xmlString, startDate, suffix, debateType) {

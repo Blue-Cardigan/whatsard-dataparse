@@ -168,18 +168,18 @@ async function prepareBatchFile(debates, debateType, getPromptForCategory, isRew
   let currentSize = 0;
 
   for (const debate of debates) {
-    const debateChunks = debate.speeches.length >= 100000 ? splitLongDebate(debate) : [debate];
+    const debateChunks = debate.speeches.length >= 50000 ? splitLongDebate(debate) : [debate];
 
     for (let chunkIndex = 0; chunkIndex < debateChunks.length; chunkIndex++) {
       const chunk = debateChunks[chunkIndex];
-      const { id, title, speeches } = chunk;
+      const { id, title, subtitle, category, speeches } = chunk;
 
       if (speeches.length === 1 && !speeches[0].speakername) {
         console.log(`Skipping processing for debate ID: ${id} - Single speech with null speakername`);
         continue;
       }
 
-      const content = `Title: ${title}\n\nSpeeches:\n${JSON.stringify(speeches, null, 2)}`;
+      const content = `Title: ${title}\n\nSubtitle: ${subtitle}\n\nCategory: ${category}\n\nSpeeches:\n${JSON.stringify(speeches, null, 2)}`;
 
       const createRequestBody = (customId, category) => {
         const prompt = getPromptForCategory(debateType, category, chunkIndex);
