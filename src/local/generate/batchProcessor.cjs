@@ -183,9 +183,55 @@ async function prepareBatchFile(debates, debateType, getPromptForCategory, isRew
 
       const createRequestBody = (customId, category) => {
         const prompt = getPromptForCategory(debateType, category, chunkIndex);
-        if (typeof prompt !== 'string') {
-          console.log(prompt)
-          throw new Error(`Invalid prompt type for category ${category}. Expected string, got ${typeof prompt}`);
+        
+        let responseSchema;
+        if (category === 'rewrite') {
+          responseSchema = {
+            type: "object",
+            properties: {
+              speeches: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    speakername: { type: "string" },
+                    rewritten_speech: { type: "string" }
+                  },
+                  required: ["speakername", "rewritten_speech"]
+                }
+              }
+            },
+            required: ["speeches"]
+          };
+        } else if (category === 'analysis') {
+          responseSchema = {
+            type: "object",
+            properties: {
+              analysis: { type: "string" }
+            },
+            required: ["analysis"]
+          };
+        } else if (category === 'labels') {
+          responseSchema = {
+            type: "object",
+            properties: {
+              labels: {
+                type: "object",
+                properties: {
+                  topics: { 
+                    type: "array",
+                    items: { type: "string" }
+                  },
+                  tags: {
+                    type: "array",
+                    items: { type: "string" }
+                  }
+                },
+                required: ["topics", "tags"]
+              }
+            },
+            required: ["labels"]
+          };
         }
 
         return {
@@ -198,7 +244,10 @@ async function prepareBatchFile(debates, debateType, getPromptForCategory, isRew
               { role: "system", content: prompt },
               { role: "user", content: content }
             ],
-            response_format: { type: "json_object" }
+            response_format: { 
+              type: "json_object",
+              schema: responseSchema
+            }
           }
         };
       };

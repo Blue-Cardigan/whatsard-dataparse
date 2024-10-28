@@ -21,20 +21,6 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
       - Highlight key phrases in bold.
       - Use a serious tone for serious topics, such as violence or extreme poverty.
       - Use a light tone with one or two emojis if the topic is a light topic.
-      
-      Provide your response as JSON with keys for "speakername", and "rewritten_speech". 
-      Reduce the number of messages if necessary, but ensure all speakers are represented and all data and arguments are preserved. 
-      
-      Structure your response like this:
-      {
-        "speeches": [
-          {
-          "speakername": "text",
-          "rewritten_speech": "text"
-          },
-          ...
-        ]
-      }
       ######
       `;
   } else if (type === 'analysis') {
@@ -43,9 +29,6 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
       Analyse ${chunkText}this current UK ${categoryName} ${debateOrDiscussion} in 100 words or less.
       Use British English spelling and grammar.
       Focus on key characteristics, content, the stances of the main contributors, and commitments to action.
-      Structure your response as JSON:
-
-      {"analysis": "text"}
       ######
       `;
   } else if (type === 'labels') {
@@ -70,17 +53,8 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
       Avoid overlapping tags such as "recall petition" and "petition officer"
       Avoid broad tags like "Parliamentary debate" or "Official Report".
     #
-
-    Structure your response as JSON:
-
-    {
-      "labels": {
-        "topics": ["Topic1", "Topic2", "More topics if needed"],
-        "tags": ["Tag1", "Tag2", "Tag3", "Tag4", "Tag5", "More tags if needed"]
-      }
-    }
     ######
-      `;
+    `;
   } else {
     return '';
   }
