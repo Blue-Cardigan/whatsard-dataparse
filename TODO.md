@@ -1,18 +1,8 @@
 Store speech id, mark speakers referenced with an annotation for markdown display
-Identify subcategories for debates:
-    Vote (/divisionsonly and chamber)
-    Private members bill
-    Party-backed bill
-    Petition
-    Point of Order
-    Prayers
-    Speaker's Statement
-    Oral Answers to Questions
-    Business of the House
 
-Find ongoing bill related with bill discussion subcategory
-- Written Statements will be useful
 Store PublicWhip votes data for vote subcategory
+Retrieve ongoing bills and link with debates
+- Written Statements are relevant context
 Only store start time for questions instead of repeating it for all messages
 Handle inconsistencies in original data like 'Speaker' instead of speaker's name, or when in type
 Extract name of introducing speaker at end of each day.

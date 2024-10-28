@@ -9,7 +9,7 @@ const { processXML: processLordsXML } = require('./parse/parsexml/lords.cjs');
 const { processXML: processWestminsterXML } = require('./parse/parsexml/westminster.cjs');
 const { processXML: processPublicBillsXML } = require('./parse/parsexml/publicbills.cjs');
 const { fetchXMLData } = require('./parse/fetchxml.cjs');
-const { format, addDays, parse, isAfter, isBefore, isValid } = require('date-fns');
+const { format, addDays, parse, isAfter, isValid } = require('date-fns');
 const { generateExtracts } = require('./parse/extracts.cjs');
 
 const supabaseUrl = process.env.DATABASE_URL;

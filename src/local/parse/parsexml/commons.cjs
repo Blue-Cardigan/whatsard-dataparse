@@ -49,15 +49,22 @@ function processCommonsXML(xmlString) {
           firstSpeechId = node.getAttribute('id')?.split('/').pop();
           firstSpeechType = node.getAttribute('type') || 'No Type';
         }
+        
+        // Check paragraphs for Urgent Question
+        const paragraphs = Array.from(node.getElementsByTagName('p'));
+        const isUrgentQuestion = paragraphs.length > 0 && 
+          paragraphs[0].textContent.trim().startsWith('(Urgent Question):');
+        
         if (!currentDebate) {
           const debateId = lastMajorHeadingId || firstSpeechId;
-          const debateType = currentType || firstSpeechType || 'No Type';
+          const debateType = isUrgentQuestion ? 'Urgent Question' : (currentType || firstSpeechType || 'No Type');
           const debateTitle = currentType || firstSpeechType || 'No Title';
           currentDebate = createDebate(debateId, debateTitle, debateType);
         }
+        
         const speakerId = node.getAttribute('person_id')?.split('/').pop() || null;
-        const speakerName = node.getAttribute('speakername') || 'No Name';
-        const content = Array.from(node.getElementsByTagName('p'))
+        const speakerName = node.getAttribute('speakername') === 'Several hon. Members' || 'Hon. Members:' ? 'No Name' : node.getAttribute('speakername') || 'No Name';
+        const content = paragraphs
           .map(p => p.textContent.trim())
           .join('\n');
         const time = node.getAttribute('time') ? node.getAttribute('time').slice(0, 5) : '00:00';

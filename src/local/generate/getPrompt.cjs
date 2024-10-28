@@ -41,7 +41,7 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
     return `
       ###INSTRUCTIONS###
       Analyse ${chunkText}this current UK ${categoryName} ${debateOrDiscussion} in 100 words or less.
-      Use British English spelling.
+      Use British English spelling and grammar.
       Focus on key characteristics, content, the stances of the main contributors, and commitments to action.
       Structure your response as JSON:
 
@@ -52,7 +52,7 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
     return `
     ###INSTRUCTIONS###
     Analyse ${chunkText}this UK ${categoryName} ${debateOrDiscussion} then provide up to 5 topics and up to 10 tags to use as metadata.
-    Use British English spelling. 
+    Use British English spelling and grammar. 
 
     #Select Topics From this List Only#
       Environment and Natural Resources

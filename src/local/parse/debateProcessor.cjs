@@ -2,7 +2,6 @@ const moment = require('moment');
 
 function createDebateProcessor(debateType) {
   let debateCounter = 0;
-  let heldDebate = null;
   let committeeInfo = null;
   let divisionCounts = [];
   let hasMinorHeading = false;
