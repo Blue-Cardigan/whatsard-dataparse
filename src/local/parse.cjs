@@ -78,9 +78,16 @@ function categoriseDebate(debate, debateType) {
     if (debate.title && debate.title.startsWith('Petition - ')) {
       return 'Petitions';
     }
-    if ((debate.speeches && debate.speeches.length === 1) || 
-        (debate.speaker_ids && debate.speaker_ids.length === 1)) {
-      return 'Administration';
+    if (debate.speeches && debate.speeches.length === 1) {
+      if (debate.subtitle && (debate.subtitle.includes('Bill Presented') || debate.subtitle.includes('Bills Presented'))) {
+        return 'Bill Presented';
+      }
+      if (debate.subtitle && debate.subtitle.includes('Delegated Legislation')) {
+        return 'Delegated Legislation';
+      }
+      if ((debate.speaker_ids && debate.speaker_ids.length === 1)) {
+        return 'Procedural';
+      }
     }
   }
 
@@ -89,7 +96,7 @@ function categoriseDebate(debate, debateType) {
       return 'Bills & Legislation';
     }
     if (debate.title && ['Point of Order', 'Prayers', 'Business of the House'].some(phrase => debate.title.includes(phrase))) {
-      return 'Administration';
+      return 'Procedural';
     }
     if (debate.subtitle && debate.subtitle.includes('was asked—')) {
       return 'Oral Answers to Questions';
