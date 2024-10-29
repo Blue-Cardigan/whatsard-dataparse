@@ -82,6 +82,9 @@ function categoriseDebate(debate, debateType) {
       if (debate.subtitle && (debate.subtitle.includes('Bill Presented') || debate.subtitle.includes('Bills Presented'))) {
         return 'Bill Presented';
       }
+      if (debate.subtitle && debate.subtitle.includes('Bill')) {
+        return 'Bills & Legislation';
+      }
       if (debate.subtitle && debate.subtitle.includes('Delegated Legislation')) {
         return 'Delegated Legislation';
       }

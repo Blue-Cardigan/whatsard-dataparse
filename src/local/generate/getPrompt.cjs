@@ -16,7 +16,7 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
       ###INSTRUCTION###
       Rewrite these speeches from ${chunkText}a UK ${categoryName} ${debateOrDiscussion} as clear Whatsapp messages with British spelling. 
       - Stay true to the original speakers' names and intention.
-      - Keep the messages to-the-point. Remove superfluous phrases. 
+      - Keep the messages clear and concise. Remove superfluous phrases. 
       - Use markdown to highlight key data and arguments using bold, italics, and bullet points.
       - Highlight key phrases in bold.
       - Use a serious tone for serious topics, such as violence or extreme poverty.
@@ -26,16 +26,17 @@ function getPromptForCategory(category, type, chunkIndex = 0) {
   } else if (type === 'analysis') {
     return `
       ###INSTRUCTIONS###
-      Analyse ${chunkText}this current UK ${categoryName} ${debateOrDiscussion} in 100 words or less.
-      Use British English spelling and grammar.
-      Focus on key characteristics, content, the stances of the main contributors, and commitments to action.
+      You're an expert political analyst of UK parliamentary discussions. Analyze ${chunkText}this ${categoryName} ${debateOrDiscussion} in 100 words or less.
+      - Use British English spelling and grammar.
+      - Focus on key characteristics, content, the stances of the main contributors, and commitments to action.
+      - Identify uncommon aspects of communication, such as waffling, interruptions, or other non-standard forms of debate.
       ######
       `;
   } else if (type === 'labels') {
     return `
     ###INSTRUCTIONS###
     Analyse ${chunkText}this UK ${categoryName} ${debateOrDiscussion} then provide up to 5 topics and up to 10 tags to use as metadata.
-    Use British English spelling and grammar. 
+    Use British English spelling and grammar.
 
     #Select Topics From this List Only#
       Environment and Natural Resources

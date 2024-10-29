@@ -16,6 +16,7 @@
     "@supabase/supabase-js": "^2.45.1"
   },
   "dependencies": {
+    "american-british-english-translator": "^0.2.1",
     "axios": "^1.7.4",
     "cheerio": "^1.0.0",
     "csv-parser": "^3.0.0",
