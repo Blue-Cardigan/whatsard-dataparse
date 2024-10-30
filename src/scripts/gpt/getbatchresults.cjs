@@ -39,9 +39,23 @@ async function getBatchResults(batchId) {
   try {
     // Check the status of the batch
     const batch = await openai.batches.retrieve(batchId);
-    console.log('Batch status:', batch.status);
+    console.log('Batch details:', JSON.stringify(batch, null, 2));
 
     if (batch.status === 'cancelled' || batch.status === 'completed') {
+      if (batch.failed_count > 0) {
+        console.log(`Failed runs: ${batch.failed_count}`);
+        // Retrieve and display error details
+        const errorFileResponse = await openai.files.content(batch.error_file_id);
+        const errorFileContents = await errorFileResponse.text();
+        const errors = errorFileContents.split('\n')
+          .filter(line => line.trim())
+          .map(JSON.parse);
+        
+        errors.forEach(error => {
+          console.error(`Error for ID ${error.custom_id}:`, error.error);
+        });
+      }
+
       if (batch.output_file_id) {
         // Retrieve the results
         const fileResponse = await openai.files.content(batch.output_file_id);
@@ -72,14 +86,54 @@ async function getBatchResults(batchId) {
         console.log('Batch completed but no output file ID or error file ID found.');
       }
     } else if (batch.status === 'failed') {
-      console.log('Batch did not complete successfully.');
+      console.error('Batch failed');
+      console.error('Batch details:', JSON.stringify(batch, null, 2));
+      
       if (batch.error_file_id) {
-        const errorFileResponse = await openai.files.content(batch.error_file_id);
-        const errorFileContents = await errorFileResponse.text();
-        console.log('Error details:', errorFileContents);
+        try {
+          const errorFileResponse = await openai.files.content(batch.error_file_id);
+          const errorFileContents = await errorFileResponse.text();
+          console.error('Error file contents:', errorFileContents);
+          
+          // Try to parse errors if they're in JSON format
+          try {
+            const errors = errorFileContents.split('\n')
+              .filter(line => line.trim())
+              .map(JSON.parse);
+            
+            console.error('Detailed errors:');
+            errors.forEach(error => {
+              console.error(`- ${JSON.stringify(error)}`);
+            });
+          } catch (parseError) {
+            // If parsing fails, just output the raw error content
+            console.error('Raw error content:', errorFileContents);
+          }
+        } catch (fileError) {
+          console.error('Error retrieving error file:', fileError);
+        }
+      } else {
+        console.error('No error file ID available');
+        console.error('Failed batch metadata:', {
+          id: batch.id,
+          created_at: batch.created_at,
+          status: batch.status,
+          failed_count: batch.failed_count,
+          succeeded_count: batch.succeeded_count,
+          total_count: batch.total_count
+        });
       }
     } else {
-      console.log('Batch is still in progress or in an unexpected state.');
+      console.log('Batch progress details:', {
+        id: batch.id,
+        status: batch.status,
+        created_at: batch.created_at,
+        completed_at: batch.completed_at,
+        total_count: batch.total_count,
+        succeeded_count: batch.succeeded_count,
+        failed_count: batch.failed_count,
+        pending_count: batch.pending_count
+      });
     }
   } catch (error) {
     console.error('Error retrieving batch results:', error);

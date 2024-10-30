@@ -81,7 +81,7 @@ async function uploadBatchFile(filename) {
         console.log('Batch output_file_id:', batch.output_file_id);
       }
       if (batch.status !== 'completed') {
-        await new Promise(resolve => setTimeout(resolve, 10000)); // Wait for 10 seconds
+        await new Promise(resolve => setTimeout(resolve, 30000)); // Wait for 10 seconds
       }
     } while (batch.status !== 'completed' && batch.status !== 'failed' && batch.status !== 'expired');
     return batch;
