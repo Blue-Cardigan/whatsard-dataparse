@@ -60,6 +60,8 @@ async function getMostRecentDate() {
   const tables = ['commons', 'lords', 'westminster', 'publicbills'];
   let mostRecentDate = null;
 
+  mostRecentDate = getYesterdayDate();
+
   for (const table of tables) {
     const { data, error } = await supabase
       .from(table)
@@ -86,11 +88,11 @@ async function getMostRecentDate() {
 
   if (!mostRecentDate) {
     console.warn('No recent date found, using yesterday as default');
-    return getNextWorkingDay(getYesterdayDate());
+    return getYesterdayDate();
   }
 
   // Return the next working day after the most recent date
-  return getNextWorkingDay(mostRecentDate);
+  return mostRecentDate;
 }
 
 const params = {
