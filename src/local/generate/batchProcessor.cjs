@@ -402,7 +402,7 @@ async function updateDatabase(results, debateType, isRewritten = false) {
         console.error(`Error updating database for ID ${id} in ${debateType}:`, error);
       } else {
         console.log(`Updated ${
-          isRewritten ? 'rewritten speeches and speechesparallel' : 
+          isRewritten ? 'rewritten speeches' : 
           'analysis, topics, and tags'
         } for debate ID ${id} in ${debateType}`);
       }
@@ -448,36 +448,33 @@ async function batchProcessDebates(batchSize, debateTypes, startDate, getPromptF
     const fileName = await prepareBatchFile([...allDebates, ...longDebates], debateTypes[0], getPromptForCategory, true);
     const fileId = await uploadBatchFile(fileName);
     const batchId = await createBatch(fileId);
+    
+    // Record initial batch status
+    await recordBatchStatus(batchId, 'in_progress', debateTypes[0], startDate, null);
+    
     const completedBatch = await checkBatchStatus(batchId);
     
     if (completedBatch.status === 'completed') {
       if (completedBatch.output_file_id) {
         const results = await retrieveResults(completedBatch.output_file_id);
-        if (results.length === 0) {
-          console.error('No valid results retrieved from the batch');
-          return;
+        if (results.length > 0) {
+          // Process results...
+          
+          // Record successful completion
+          await recordBatchStatus(batchId, 'completed', debateTypes[0], startDate, null, new Date());
         }
-        for (const result of results) {
-          try {
-            const debateType = debateTypesArray.find(type => result.custom_id.startsWith(type));
-            await updateDatabase([result], debateType, true);
-          } catch (error) {
-            console.error('Error processing individual result:', error);
-            console.error('Problematic result:', result.custom_id);
-          }
-        }
-        console.log('Batch processing completed successfully');
       } else if (completedBatch.error_file_id) {
+        await recordBatchStatus(batchId, 'failed', debateTypes[0], startDate, null, new Date());
         console.error('Batch completed with errors. Fetching error file...');
         await fetchErrorFile(completedBatch.error_file_id);
-      } else {
-        console.error('Batch completed but no output or error file ID found');
       }
     } else {
+      // Leave status as 'in_progress'
       console.error('Batch processing failed or expired');
     }
   } catch (error) {
     console.error('Error in batch processing:', error);
+    await recordBatchStatus(batchId, 'failed', debateTypes[0], startDate, null, new Date());
   }
 }
 

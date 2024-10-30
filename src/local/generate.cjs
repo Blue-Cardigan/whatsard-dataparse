@@ -17,6 +17,7 @@ const {
 } = require('./generate/batchProcessor.cjs');
 const { getPromptForCategory } = require('./generate/getPrompt.cjs');
 const fs = require('fs').promises;
+const { runChatProcessing } = require('./generate/chatRunner.cjs');
 
 async function testSingleDebate(debateId, debateType, generateType = null) {
   // Fetch the debate
@@ -114,6 +115,9 @@ async function runBothProcesses() {
   const args = process.argv.slice(2);
   const params = Object.fromEntries(args.map(arg => arg.split('=')));
 
+  // Check if we should use chat processor instead of batch
+  const useChat = params.processor === 'chat';
+  
   // Check if we're in test mode
   if (params.test) {
     if (!params.debateType) {
@@ -132,17 +136,32 @@ async function runBothProcesses() {
   const startDate = params.startDate || null;
   const endDate = params.endDate || null;
 
-  // Only run specified processes in regular mode too
-  if (!params.generate || params.generate === 'analysis' || params.generate === 'labels') {
-    console.log('Starting supportingInfo process (analysis and labels)...');
-    for (const type of debateType) {
-      await processSingleDebateType(type, batchSize, startDate, endDate, getPromptForCategory);
+  if (useChat) {
+    // Use chat processor
+    console.log('Using chat processor...');
+    if (!params.generate) {
+      // Run both processes when no specific generate type is specified
+      console.log('Running analysis and labels...');
+      await runChatProcessing(batchSize, debateType, startDate, endDate, false);
+      console.log('Running rewrite...');
+      await runChatProcessing(batchSize, debateType, startDate, endDate, true);
+    } else {
+      // Run specific process type
+      await runChatProcessing(batchSize, debateType, startDate, endDate, params.generate === 'rewrite');
     }
-  }
+  } else {
+    // Use batch processor (existing code)
+    if (!params.generate || params.generate === 'analysis' || params.generate === 'labels') {
+      console.log('Starting supportingInfo process (analysis and labels)...');
+      for (const type of debateType) {
+        await processSingleDebateType(type, batchSize, startDate, endDate, getPromptForCategory);
+      }
+    }
 
-  if (!params.generate || params.generate === 'rewrite') {
-    console.log('Starting mainChat process (rewrite)...');
-    await batchProcessDebates(batchSize, debateType, startDate, getPromptForCategory);
+    if (!params.generate || params.generate === 'rewrite') {
+      console.log('Starting mainChat process (rewrite)...');
+      await batchProcessDebates(batchSize, debateType, startDate, getPromptForCategory);
+    }
   }
 
   console.log('All processes completed.');
