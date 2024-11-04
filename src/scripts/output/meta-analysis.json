@@ -1,0 +1,110 @@
+{
+  "analysisDate": "2024-11-03T21:02:01.118Z",
+  "summary": {
+    "totalFilesAnalyzed": 19,
+    "byType": {
+      "commons": {
+        "filesAnalyzed": 4,
+        "averagePerFile": {
+          "businessSections": "2.5",
+          "speeches": "438.3",
+          "uniqueSpeakers": "87.5",
+          "duration": "407.0"
+        },
+        "businessTypes": {
+          "OTHER": 7,
+          "STATEMENTS": 3
+        },
+        "speakerStats": {
+          "totalUniqueSpeakers": 350,
+          "ministerialContributions": 0,
+          "backbenchContributions": 1694,
+          "interventions": 0
+        },
+        "references": {
+          "uniqueMembersReferenced": 0,
+          "uniqueDatesReferenced": 2899,
+          "uniqueBillsReferenced": 0,
+          "totalQuotes": 204
+        }
+      },
+      "lords": {
+        "filesAnalyzed": 5,
+        "averagePerFile": {
+          "businessSections": "5.0",
+          "speeches": "157.0",
+          "uniqueSpeakers": "47.4",
+          "duration": "344.8"
+        },
+        "businessTypes": {
+          "OTHER": 8,
+          "LORDS_QUESTIONS": 7,
+          "LORDS_LEGISLATION": 3,
+          "STATEMENTS": 5,
+          "DEATH_ANNOUNCEMENT": 2
+        },
+        "speakerStats": {
+          "totalUniqueSpeakers": 237,
+          "ministerialContributions": 0,
+          "backbenchContributions": 772,
+          "interventions": 0
+        },
+        "references": {
+          "uniqueMembersReferenced": 0,
+          "uniqueDatesReferenced": 4062,
+          "uniqueBillsReferenced": 0,
+          "totalQuotes": 158
+        }
+      },
+      "westminhall": {
+        "filesAnalyzed": 3,
+        "averagePerFile": {
+          "businessSections": "3.7",
+          "speeches": "70.7",
+          "uniqueSpeakers": "26.7",
+          "duration": "337.3"
+        },
+        "businessTypes": {
+          "WESTMINSTER_HALL": 11
+        },
+        "speakerStats": {
+          "totalUniqueSpeakers": 80,
+          "ministerialContributions": 0,
+          "backbenchContributions": 209,
+          "interventions": 0
+        },
+        "references": {
+          "uniqueMembersReferenced": 0,
+          "uniqueDatesReferenced": 863,
+          "uniqueBillsReferenced": 0,
+          "totalQuotes": 53
+        }
+      },
+      "standing": {
+        "filesAnalyzed": 7,
+        "averagePerFile": {
+          "businessSections": "1.7",
+          "speeches": "0.0",
+          "uniqueSpeakers": "3.7",
+          "duration": "0.0"
+        },
+        "businessTypes": {
+          "BILL_CONSIDERATION": 8,
+          "OTHER": 4
+        },
+        "speakerStats": {
+          "totalUniqueSpeakers": 26,
+          "ministerialContributions": 0,
+          "backbenchContributions": 590,
+          "interventions": 0
+        },
+        "references": {
+          "uniqueMembersReferenced": 0,
+          "uniqueDatesReferenced": 0,
+          "uniqueBillsReferenced": 0,
+          "totalQuotes": 62
+        }
+      }
+    }
+  }
+}
