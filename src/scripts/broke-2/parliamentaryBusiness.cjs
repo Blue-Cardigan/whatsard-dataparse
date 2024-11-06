@@ -87,6 +87,24 @@ class ParliamentaryProcessor {
     processNode(node) {
       if (!node || node.nodeType !== NODE_TYPES.ELEMENT_NODE) return;
 
+      // Detect start of question time
+      if (node.nodeName === 'oral-heading' && 
+        node.textContent.includes('Oral Answers to Questions')) {
+        
+        // Get department from next major-heading
+        const department = this.findNextDepartmentHeading(node);
+        
+        this.currentBusiness = new QuestionTimeSection({
+            category: 'ORAL_QUESTIONS',
+            type: 'DEPARTMENTAL'
+        }, {
+            department: department,
+            minister: null // Will be set when minister speaks
+        });
+        
+        return;
+      }
+
       try {
         // Handle member references
         if (node.nodeName.toLowerCase() === 'member') {
@@ -206,6 +224,17 @@ class ParliamentaryProcessor {
         this.currentBusiness.metadata.subtitle = content;
       }
     }
+
+    findNextDepartmentHeading(node) {
+      let current = node.nextSibling;
+      while (current) {
+          if (current.nodeName === 'major-heading') {
+              return current.textContent.trim();
+          }
+          current = current.nextSibling;
+      }
+      return null;
+    }
   
     processSpeech(node) {
       const speech = this.extractSpeech(node);
@@ -267,8 +296,14 @@ class ParliamentaryProcessor {
         procedural: this.isProceduralSpeech(node),
         colnum: node.getAttribute('colnum'),
         oral_qnum: node.getAttribute('oral-qnum'),
+        qnum: this.extractQuestionNumber(node),
         quotedText: this.extractQuotedText(node)
       };
+    }
+
+    extractQuestionNumber(node) {
+      const para = node.getElementsByTagName('p')[0];
+      return para?.getAttribute('qnum') || null;
     }
   
     extractQuotedText(node) {
@@ -585,7 +620,6 @@ function formatSpeechForDB(speech) {
       })) : null
     };
   }
-
 
 // Core classes
 class ParliamentaryContext {
@@ -1119,83 +1153,125 @@ class ParliamentaryContext {
         return /^([0-1][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/.test(time);
     }
 }
-// Add the new QuestionTimeSection class
 class QuestionTimeSection extends ParliamentaryBusiness {
-    constructor(type, metadata = {}) {
-        super(type, metadata);
-        this.department = type.department;
-        this.minister = metadata.minister;
-        this.questionGroups = [];
-        this.currentGroup = null;
-        this.topicalQuestions = false;
-    
-        // Track grouped questions
-        this.groupedQuestions = new Map();
-        this.currentGroupedQuestionId = null;
-
-        // Add Lords-specific tracking
-        this.isLords = metadata.isLords || false;
-        this.questionText = null;  // Full question text for Lords
-        this.ministerialResponse = null;
-        this.supplementaryQuestions = [];
-    }
-
-    processSpeech(speech) {
-        if (this.isLords) {
-            if (speech.type === 'Question') {
-                this.questionText = speech.content;
-            } else if (!this.ministerialResponse && speech.member?.role?.includes('Minister')) {
-                this.ministerialResponse = speech;
-            } else {
-                this.supplementaryQuestions.push(speech);
-            }
-        }
-        // Track grouped questions (questions with same text asked by multiple MPs)
-        if (speech.type === 'Start Question') {
-          const questionText = speech.content.trim();
-          if (!this.groupedQuestions.has(questionText)) {
-            this.groupedQuestions.set(questionText, []);
-          }
-          this.currentGroupedQuestionId = questionText;
-          this.groupedQuestions.get(questionText).push(speech);
-        }
-
-        // Add special handling for "I call" speeches
-        if (speech.content?.includes('I call')) {
-          // Extract the role from "I call the shadow Minister" or similar
-          const roleMatch = speech.content.match(/I call (?:the )?([^.(]+)/i);
-          if (roleMatch) {
-              this.pendingSpeakerCall = {
-                  time: speech.time,
-                  role: roleMatch[1].trim(),
-                  speakerId: speech.speakerId,
-                  speakerName: speech.speakerName
-              };
-          }
-          return; // Don't process this as a regular speech
-      }
-    
-        super.processSpeech(speech);
-    }
-
-  shouldStartNewGroup(speech) {
-    return speech.type === 'Start Question' || 
-           (this.topicalQuestions && speech.type === 'Start TopicalQuestion');
-  }
-
-  determineGroupType(speech) {
-    if (speech.content.includes('Topical Question')) {
-      this.topicalQuestions = true;
-      return 'TOPICAL';
-    }
-    return this.topicalQuestions ? 'TOPICAL' : 'SUBSTANTIVE';
-  }
-
-  finalizeCurrentGroup() {
-    if (this.currentGroup) {
-      this.questionGroups.push(this.currentGroup);
+  constructor(type, metadata = {}) {
+      super(type, metadata);
+      
+      // Track current question group
       this.currentGroup = null;
-    }
+      this.questionGroups = [];
+      
+      // Enhanced tracking
+      this.department = metadata.department;
+      this.leadMinister = null;
+      this.pendingMinisterRole = null;
+      
+      // Question tracking
+      this.questionsByNumber = new Map();
+      this.supplementaryQuestions = new Map();
+      this.groupedQuestions = new Map(); // Group by question text
+  }
+
+  processSpeech(speech) {
+      // Handle department identification from "was asked" pattern
+      if (speech.content?.includes('was asked—')) {
+          const roleMatch = speech.content.match(/The ([^]+?) was asked/);
+          if (roleMatch) {
+              this.pendingMinisterRole = roleMatch[1].trim();
+          }
+          return;
+      }
+
+      // Handle grouped questions
+      if (speech.type === 'Start Question' && speech.oral_qnum) {
+          const questionText = speech.content.trim();
+          
+          // Group identical questions together
+          if (!this.groupedQuestions.has(questionText)) {
+              this.groupedQuestions.set(questionText, []);
+          }
+          
+          this.groupedQuestions.get(questionText).push({
+              number: speech.oral_qnum,
+              speakerId: speech.speakerId,
+              speakerName: speech.speakerName,
+              time: speech.time
+          });
+
+          // Track individual questions
+          this.questionsByNumber.set(speech.oral_qnum, {
+              question: speech,
+              answer: null,
+              supplementaries: []
+          });
+      }
+
+      // Handle ministerial answers
+      if (speech.type === 'Start Answer') {
+          // If we have a pending minister role, set the lead minister
+          if (this.pendingMinisterRole) {
+              this.leadMinister = {
+                  id: speech.speakerId,
+                  name: speech.speakerName,
+                  role: this.pendingMinisterRole
+              };
+              this.pendingMinisterRole = null;
+          }
+
+          // Link answer to all grouped questions
+          const currentGroup = Array.from(this.groupedQuestions.values())
+              .find(group => !group[0].answer);
+              
+          if (currentGroup) {
+              currentGroup.forEach(q => {
+                  const questionRecord = this.questionsByNumber.get(q.number);
+                  if (questionRecord) {
+                      questionRecord.answer = speech;
+                  }
+              });
+          }
+      }
+
+      // Handle supplementary questions
+      if (speech.type === 'Start SupplementaryQuestion') {
+          // Find the most recent answered question
+          const lastAnsweredQuestion = Array.from(this.questionsByNumber.values())
+              .reverse()
+              .find(q => q.answer);
+              
+          if (lastAnsweredQuestion) {
+              lastAnsweredQuestion.supplementaries.push({
+                  question: speech,
+                  answer: null
+              });
+          }
+      }
+
+      super.processSpeech(speech);
+  }
+
+  finalize() {
+      // Group questions and their supplementaries
+      const finalizedGroups = [];
+      
+      for (const [questionText, questions] of this.groupedQuestions) {
+          const group = {
+              text: questionText,
+              questions: questions.map(q => ({
+                  ...q,
+                  supplementaries: this.questionsByNumber.get(q.number)?.supplementaries || []
+              })),
+              ministerialAnswer: questions[0]?.answer || null
+          };
+          finalizedGroups.push(group);
+      }
+
+      return {
+          ...super.finalize(),
+          department: this.department,
+          leadMinister: this.leadMinister,
+          questionGroups: finalizedGroups
+      };
   }
 }
 
