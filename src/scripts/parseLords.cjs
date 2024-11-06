@@ -65,14 +65,13 @@ class LordsBusinessSection extends ParliamentaryBusiness {
     // Track contribution types
     this.trackContributionType(speech);
     
-    // Track minister responses
-    if (speech.type === 'Start Answer' && speech.metadata?.isMinisterial) {
-      this.ministerResponding = speech.speakerName;
+    // Enhanced minister tracking
+    if (speech.type === 'Start Answer' && this.isMinisterialSpeech(speech)) {
       const responses = this.ministerialResponses.get(speech.speakerName) || [];
       responses.push({
         time: speech.time,
         content: speech.content,
-        role: speech.metadata?.position
+        role: this.extractMinisterialRole(speech.speakerName)
       });
       this.ministerialResponses.set(speech.speakerName, responses);
     }
@@ -87,18 +86,26 @@ class LordsBusinessSection extends ParliamentaryBusiness {
         this.contributionTypes.answers++;
         break;
       case 'Start Speech':
-        if (speech.metadata?.type === 'motion') {
+        if (this.isMotionSpeech(speech)) {
           this.contributionTypes.motions++;
-        } else if (speech.metadata?.type === 'amendment') {
-          this.contributionTypes.amendments++;
         } else {
           this.contributionTypes.statements++;
         }
         break;
-      case 'Withdrawal':
-        this.contributionTypes.withdrawals++;
-        break;
+      // Add other types as needed
     }
+  }
+
+  isMinisterialSpeech(speech) {
+    const ministerialTitles = [
+      'Minister',
+      'Secretary of State',
+      'Parliamentary Under-Secretary',
+      'Lord Chancellor'
+    ];
+    return ministerialTitles.some(title => 
+      speech.speakerRole?.includes(title)
+    );
   }
 
   extractMinisterialRole(name) {
@@ -314,17 +321,94 @@ class LordsParliamentaryProcessor extends EnhancedParliamentaryProcessor {
 
     const speech = this.extractSpeech(node);
     
-    // Check for motion text in different formats
-    if (this.isMotionSpeech(node)) {
-      const motion = this.extractMotion(node, speech);
-      if (motion) {
-        this.currentBusiness.addMotion(motion);
-        return; // Skip normal speech processing for motion text
-      }
+    // Extract quoted text
+    speech.quotedText = this.extractQuotedText(node);
+    
+    // Enhanced metadata
+    speech.metadata = {
+      peerageType: this.extractPeerageType(speech.speakerName),
+      position: this.extractPosition(speech.speakerName),
+      isMinisterial: this.isMinisterialSpeech(speech),
+      procedural: this.isProceduralContent(node)
+    };
+
+    super.processSpeech(node);
+  }
+
+  extractQuotedText(node) {
+    return Array.from(node.getElementsByTagName('p'))
+      .filter(p => p.getAttribute('class')?.includes('indent') || 
+                   p.getAttribute('class')?.includes('quote'))
+      .map(p => ({
+        text: p.textContent.trim(),
+        source: p.getAttribute('source') || null,
+        isIndented: p.getAttribute('class')?.includes('indent') || false
+      }));
+  }
+
+  isProceduralContent(node) {
+    const proceduralPhrases = [
+      'My Lords',
+      'I beg to move',
+      'The Question is',
+      'Noble Lords',
+      'with the leave of the House'
+    ];
+    
+    return proceduralPhrases.some(phrase => 
+      node.textContent.includes(phrase)
+    );
+  }
+
+  extractPeerageType(name) {
+    if (!name) return null;
+    if (name.includes('Lord')) return 'BARON';
+    if (name.includes('Baroness')) return 'BARONESS';
+    if (name.includes('Earl')) return 'EARL';
+    if (name.includes('Viscount')) return 'VISCOUNT';
+    if (name.includes('Duke')) return 'DUKE';
+    return null;
+  }
+
+  extractPosition(name) {
+    const positions = [
+      'Lord Chancellor',
+      'Leader of the House',
+      'Lord Privy Seal',
+      'Lord Speaker'
+    ];
+    return positions.find(p => name?.includes(p)) || null;
+  }
+
+  determineBusinessType(node) {
+    const content = node.textContent.trim();
+    
+    // Check for introductions
+    if (content.includes('Introduction:')) {
+      return { category: 'LORDS_INTRODUCTIONS', type: 'DEFAULT' };
+    }
+    
+    // Check for oaths
+    if (content.includes('Oaths and Affirmations')) {
+      return { category: 'LORDS_OATHS', type: 'DEFAULT' };
+    }
+    
+    // Check for questions
+    if (content.includes('Question')) {
+      return { category: 'LORDS_QUESTIONS', type: 'ORAL_QUESTIONS' };
+    }
+    
+    // Check for legislation
+    if (content.includes('Bill [HL]') && content.includes('First Reading')) {
+      return { category: 'LORDS_LEGISLATION', type: 'FIRST_READING' };
+    }
+    
+    // Check for membership motions
+    if (content.includes('Membership Motion')) {
+      return { category: 'LORDS_MOTIONS', type: 'MEMBERSHIP' };
     }
 
-    // Process regular speech
-    super.processSpeech(node);
+    return super.determineBusinessType(node);
   }
 
   isMotionSpeech(node) {

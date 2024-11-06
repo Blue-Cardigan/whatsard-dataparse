@@ -319,65 +319,68 @@ Maintain the same order of speakers and approximate length ratios between speech
 async function updateDatabase(results, debateType, isRewritten = false) {
   const combinedResults = {};
 
+  // First pass: organize all chunks by their base ID
   for (const result of results) {
     const { custom_id, response } = result;
     if (response.status_code === 200) {
-      const [id, chunk, type] = custom_id.split('_');
-      let content;
-      try {
-        content = JSON.parse(response.body.choices[0].message.content);
-        
-        // Translate content based on type
-        if (isRewritten) {
-          content.speeches = content.speeches.map(speech => ({
-            ...speech,
-            rewritten_speech: translateContent(speech.rewritten_speech, true)
-          }));
-        } else if (type === 'analysis') {
-          content.analysis = translateContent(content.analysis, true);
-        } else if (type === 'labels') {
-          // Directly handle topics and tags arrays
-          content.topics = content.topics.map(topic => 
-            translateContent(topic, true)
-          );
-          content.tags = content.tags.map(tag => 
-            translateContent(tag, true)
-          );
-        }
-      } catch (error) {
-        console.error(`Error processing content for ID ${custom_id}:`, error);
-        console.error('Skipping this result and continuing with the next one');
-        continue;
-      }
-
-      if (!combinedResults[id]) {
-        combinedResults[id] = { 
+      const [baseId, chunkInfo, type] = custom_id.split('_');
+      const chunkIndex = parseInt(chunkInfo.replace('chunk', ''));
+      
+      if (!combinedResults[baseId]) {
+        combinedResults[baseId] = { 
           analysis: '', 
           topics: [], 
           tags: [], 
           rewritten_speeches: [], 
-          speechesParallel: [] 
+          chunks: new Map() // Track chunks for proper ordering
         };
       }
 
-      if (isRewritten) {
-        combinedResults[id].rewritten_speeches = combinedResults[id].rewritten_speeches.concat(content.speeches);
-        combinedResults[id].speechesParallel = combinedResults[id].speechesParallel.concat(content.speechesParallel || []);
-      } else if (type === 'analysis') {
-        combinedResults[id].analysis += content.analysis + '\n\n';
-      } else if (type === 'labels') {
-        // Combine topics and tags arrays
-        combinedResults[id].topics = Array.from(new Set([
-          ...combinedResults[id].topics,
-          ...content.topics
-        ]));
-        combinedResults[id].tags = Array.from(new Set([
-          ...combinedResults[id].tags,
-          ...content.tags
-        ]));
+      try {
+        const content = JSON.parse(response.body.choices[0].message.content);
+        
+        // Store chunk with its index for ordered processing
+        combinedResults[baseId].chunks.set(chunkIndex, {
+          content,
+          type
+        });
+      } catch (error) {
+        console.error(`Error processing content for ID ${custom_id}:`, error);
+        continue;
       }
-    } else {
-      console.error(`Error processing ID ${custom_id}:`, response.error);
+    }
+  }
+
+  // Second pass: process chunks in order
+  for (const baseId in combinedResults) {
+    const debate = combinedResults[baseId];
+    const sortedChunks = Array.from(debate.chunks.entries())
+      .sort(([a], [b]) => a - b);
+    
+    for (const [_, chunkData] of sortedChunks) {
+      const { content, type } = chunkData;
+      
+      if (isRewritten) {
+        // Translate and concatenate rewritten speeches in order
+        const translatedSpeeches = content.speeches.map(speech => ({
+          ...speech,
+          rewritten_speech: translateContent(speech.rewritten_speech, true)
+        }));
+        debate.rewritten_speeches.push(...translatedSpeeches);
+      } else {
+        if (type === 'analysis') {
+          debate.analysis += translateContent(content.analysis, true) + '\n\n';
+        } else if (type === 'labels') {
+          debate.topics = Array.from(new Set([
+            ...debate.topics,
+            ...content.topics.map(topic => translateContent(topic, true))
+          ]));
+          debate.tags = Array.from(new Set([
+            ...debate.tags,
+            ...content.tags.map(tag => translateContent(tag, true))
+          ]));
+        }
+      }
     }
   }
 
@@ -422,16 +425,43 @@ async function fetchErrorFile(errorFileId) {
   }
 }
 
+async function recordBatchStatus(batchId, status, debateType, startDate, batch, completedAt = null) {
+  // Convert expires_at timestamp to YYYY-MM-DD format
+  const endDate = new Date(batch.expires_at * 1000).toISOString().split('T')[0];
+
+  const { error } = await supabase
+    .from('batch_status')
+    .insert({
+      batch_id: batchId,
+      status,
+      debate_type: debateType,
+      start_date: startDate,
+      end_date: endDate,
+      completed_at: completedAt
+    });
+
+  if (error) {
+    console.error('Error recording batch status:', error);
+  }
+}
+
 async function batchProcessDebates(batchSize, debateTypes, startDate, getPromptForCategory) {
   try {
     const allDebates = [];
     const longDebates = [];
     const debateTypesArray = Array.isArray(debateTypes) ? debateTypes : [debateTypes];
     const debatesPerType = Math.ceil(batchSize / debateTypesArray.length);
-    const MAX_TOTAL_DEBATES = batchSize;
 
+    // Fetch and track regular and long debates separately
     for (const debateType of debateTypesArray) {
-      const { filteredData, longDebates: typeLongDebates } = await fetchUnprocessedDebates(debatesPerType, debateType, startDate, null, true);
+      const { filteredData, longDebates: typeLongDebates } = await fetchUnprocessedDebates(
+        debatesPerType, 
+        debateType, 
+        startDate, 
+        null, 
+        true
+      );
+      console.log(`${debateType}: Found ${filteredData.length} regular debates and ${typeLongDebates.length} long debates`);
       allDebates.push(...filteredData);
       longDebates.push(...typeLongDebates);
     }
@@ -441,8 +471,8 @@ async function batchProcessDebates(batchSize, debateTypes, startDate, getPromptF
       return;
     }
     
-    if (allDebates.length > MAX_TOTAL_DEBATES) {
-      allDebates = allDebates.slice(0, MAX_TOTAL_DEBATES);
+    if (allDebates.length > batchSize) {
+      allDebates = allDebates.slice(0, batchSize);
     }
     
     const fileName = await prepareBatchFile([...allDebates, ...longDebates], debateTypes[0], getPromptForCategory, true);
@@ -489,5 +519,6 @@ module.exports = {
   prepareBatchFile,
   updateDatabase,
   batchProcessDebates,
-  fetchErrorFile, // Export the new function
+  fetchErrorFile,
+  recordBatchStatus,
 };

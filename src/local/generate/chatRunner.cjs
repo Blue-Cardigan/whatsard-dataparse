@@ -47,11 +47,81 @@ function translateContent(text, toBritish = true) {
   return translatedText;
 }
 
+// Add splitLongDebate function (similar to batchProcessor but simplified for chat)
+function splitLongDebate(debate, maxChunkSize = 100000) {
+  const { id, title, subtitle, category, speeches } = debate;
+  const chunks = [];
+  let currentChunk = [];
+  let currentSize = 0;
+
+  speeches.forEach(speech => {
+    const speechJson = JSON.stringify(speech);
+    if (currentSize + speechJson.length > maxChunkSize) {
+      chunks.push({ 
+        id, 
+        title, 
+        subtitle, 
+        category, 
+        speeches: currentChunk,
+        isChunk: true,
+        totalChunks: 0  // Will be set after all chunks are created
+      });
+      currentChunk = [];
+      currentSize = 0;
+    }
+    currentChunk.push(speech);
+    currentSize += speechJson.length;
+  });
+
+  if (currentChunk.length > 0) {
+    chunks.push({ 
+      id, 
+      title, 
+      subtitle, 
+      category, 
+      speeches: currentChunk,
+      isChunk: true,
+      totalChunks: 0 
+    });
+  }
+
+  // Set totalChunks for each chunk
+  chunks.forEach(chunk => chunk.totalChunks = chunks.length);
+  return chunks;
+}
+
+// Modify processSingleDebateChat to handle chunks
 async function processSingleDebateChat(debate, debateType, isRewrite = false) {
+  const speechesJson = JSON.stringify(debate.speeches);
+  const isLongDebate = speechesJson.length >= 100000;
+  
+  if (isLongDebate) {
+    console.log(`Debate ${debate.id} is too long (${speechesJson.length} chars). Splitting into chunks...`);
+    const chunks = splitLongDebate(debate);
+    console.log(`Split into ${chunks.length} chunks`);
+    
+    const chunkResults = [];
+    for (let i = 0; i < chunks.length; i++) {
+      console.log(`Processing chunk ${i + 1}/${chunks.length} for debate ${debate.id}`);
+      const chunkResult = await processDebateChunk(chunks[i], debateType, isRewrite, i);
+      if (chunkResult) {
+        chunkResults.push(chunkResult);
+      }
+    }
+    
+    return combineChunkResults(chunkResults, isRewrite);
+  }
+
+  // Original processing for normal-sized debates
+  return processDebateChunk(debate, debateType, isRewrite);
+}
+
+// New function to process individual chunks
+async function processDebateChunk(debate, debateType, isRewrite = false, chunkIndex = 0) {
   const { id, title, subtitle, category, speeches } = debate;
   
   if (speeches.length === 1 && !speeches[0].speakername) {
-    console.log(`Skipping debate ID: ${id} - Single speech with null speakername`);
+    console.log(`Skipping chunk ${chunkIndex} of debate ID: ${id} - Single speech with null speakername`);
     return null;
   }
 
@@ -180,6 +250,39 @@ Maintain the same order of speakers and approximate length ratios between speech
   return results;
 }
 
+// New function to combine results from chunks
+function combineChunkResults(chunkResults, isRewrite) {
+  if (chunkResults.length === 0) return null;
+
+  if (isRewrite) {
+    return {
+      rewrite: {
+        speeches: chunkResults.flatMap(result => 
+          result.rewrite ? result.rewrite.speeches : []
+        )
+      }
+    };
+  } else {
+    return {
+      analysis: {
+        analysis: chunkResults
+          .map(result => result.analysis?.analysis || '')
+          .filter(Boolean)
+          .join('\n\n')
+      },
+      labels: {
+        topics: [...new Set(chunkResults.flatMap(result => 
+          result.labels?.topics || []
+        ))],
+        tags: [...new Set(chunkResults.flatMap(result => 
+          result.labels?.tags || []
+        ))]
+      }
+    };
+  }
+}
+
+// Modify updateDebateWithResults to handle combined results
 async function updateDebateWithResults(id, debateType, results) {
   const updateData = {};
 
@@ -187,7 +290,7 @@ async function updateDebateWithResults(id, debateType, results) {
     updateData.rewritten_speeches = results.rewrite.speeches;
   } else {
     if (results.analysis) {
-      updateData.analysis = results.analysis.analysis;
+      updateData.analysis = results.analysis.analysis.trim();
     }
     if (results.labels) {
       updateData.topics = results.labels.topics;
@@ -213,24 +316,30 @@ async function runChatProcessing(batchSize, debateTypes, startDate, endDate, isR
   for (const debateType of debateTypesArray) {
     console.log(`Processing ${debateType}...`);
     
-    const query = supabase
+    // Build the query
+    let query = supabase
       .from(debateType)
       .select('*')
       .filter('speeches', 'not.eq', '[]')
-      .filter('speeches', 'not.eq', null)
-      .order('id', { ascending: true })
-      .limit(batchSize);
+      .filter('speeches', 'not.eq', null);
 
-    if (isRewrite) {
-      query.is('rewritten_speeches', null);
-    } else {
-      query.is('analysis', null)
-           .is('topics', null)
-           .is('tags', null);
+    // Add date filters if provided
+    if (startDate) {
+      query = query.gte('id', `${debateType}${startDate}`);
+    }
+    if (endDate) {
+      query = query.lte('id', `${debateType}${endDate}`);
     }
 
-    if (startDate) query.gte('id', `${debateType}${startDate}`);
-    if (endDate) query.lte('id', `${debateType}${endDate}`);
+    // Add process-specific filters
+    if (isRewrite) {
+      query = query.is('rewritten_speeches', null);
+    } else {
+      // For analysis/labels, check if ANY of these are null
+      query = query.or('analysis.is.null,topics.is.null,tags.is.null');
+    }
+
+    query = query.order('id', { ascending: true }).limit(batchSize);
 
     const { data: debates, error } = await query;
 

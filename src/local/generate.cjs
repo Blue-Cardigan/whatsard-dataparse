@@ -137,6 +137,7 @@ async function runBothProcesses() {
   const endDate = params.endDate || null;
 
   if (useChat) {
+    console.log('current OPENAI_API_KEY', process.env.OPENAI_API_KEY);
     // Use chat processor
     console.log('Using chat processor...');
     if (!params.generate) {

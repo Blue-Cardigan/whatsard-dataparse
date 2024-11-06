@@ -143,23 +143,6 @@ async function checkPreviousBatchStatus(startDate) {
   return data?.[0] || null;
 }
 
-async function recordBatchStatus(batchId, status, debateType, startDate, endDate, completedAt = null) {
-  const { error } = await supabase
-    .from('batch_status')
-    .insert({
-      batch_id: batchId,
-      status,
-      debate_type: debateType,
-      start_date: startDate,
-      end_date: endDate,
-      completed_at: completedAt
-    });
-
-  if (error) {
-    console.error('Error recording batch status:', error);
-  }
-}
-
 async function main() {
   try {
     params.startDate = await getMostRecentDate();

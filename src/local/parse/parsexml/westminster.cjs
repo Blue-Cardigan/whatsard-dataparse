@@ -8,7 +8,7 @@ function processWestminsterXML(xmlString) {
   const { createDebate, addSpeech, finalizeDebates } = createDebateProcessor('westminster');
   const debates = [];
   let currentDebate = null;
-  let currentType = '';
+  let currentSubtitle = '';
   let lastMajorHeadingId = null;
 
   function finalizeCurrentDebate() {
@@ -22,11 +22,11 @@ function processWestminsterXML(xmlString) {
     switch (node.nodeName) {
       case 'major-heading':
         let headingContent = node.textContent.trim();
-        if (currentType === '') {
-          currentType = headingContent;
+        if (currentSubtitle === '') {
+          currentSubtitle = headingContent;
         } else {
           finalizeCurrentDebate();
-          currentType = headingContent;
+          currentSubtitle = headingContent;
         }
         lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `major_${debates.length + 1}`;
         break;
@@ -34,8 +34,8 @@ function processWestminsterXML(xmlString) {
       case 'speech':
         if (!currentDebate) {
           const id = node.getAttribute('id')?.split('/').pop() || `speech_${debates.length + 1}`;
-          const type = node.getAttribute('type') || 'Unknown';
-          currentDebate = createDebate(id, "No Title", type);
+          const subtitle = node.getAttribute('type') || 'Unknown';
+          currentDebate = createDebate(id, "No Title", subtitle);
         }
         const speakerId = node.getAttribute('person_id')?.split('/').pop() || null;
         const speakerName = node.getAttribute('speakername') || 'No Name';
@@ -50,17 +50,17 @@ function processWestminsterXML(xmlString) {
         finalizeCurrentDebate();
         const fullTitle = node.textContent.trim();
         let title = fullTitle;
-        let type = title;
+        let subtitle = title;
 
-        // Extract text in square brackets for type
+        // Extract text in square brackets for subtitle
         const match = fullTitle.match(/^(.*?)\s*—\s*\[(.*?)\]$/);
         if (match) {
           title = match[1].trim();
-          type = match[2].trim();
+          subtitle = match[2].trim();
         }
 
         const id = node.getAttribute('id')?.split('/').pop() || `minor_${debates.length + 1}`;
-        currentDebate = createDebate(id, title, type);
+        currentDebate = createDebate(id, title, subtitle);
         break;
     }
 
