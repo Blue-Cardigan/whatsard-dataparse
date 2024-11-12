@@ -5,12 +5,7 @@ CREATE TABLE business_sessions (
     house TEXT NOT NULL CHECK (house IN ('commons', 'lords', 'westminster_hall', 'committee')),
     start_time TIME,
     end_time TIME,
-    
-    -- Session metadata
-    session_type TEXT NOT NULL,
-    title TEXT,
-    subtitle TEXT,
-    department TEXT,
+    duration INTERVAL,
     
     -- Statistics
     speech_count INTEGER DEFAULT 0,
@@ -18,8 +13,8 @@ CREATE TABLE business_sessions (
     division_count INTEGER DEFAULT 0,
     
     -- Timestamps
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 );
 
 CREATE TABLE business_items (
@@ -31,6 +26,20 @@ CREATE TABLE business_items (
     type_category TEXT NOT NULL,
     type_specific TEXT,
     sequence_number INTEGER,
+
+    -- Members
+    chair_id TEXT,
+    chair_name TEXT,
+    deputy_chair_id TEXT,
+    deputy_chair_name TEXT,
+    chair_start_time TIME,
+    chair_end_time TIME,
+
+    clerks TEXT[],
+    witnesses TEXT[],
+
+    lead_minister_name TEXT,
+    lead_minister_role TEXT,
     
     -- Content
     title TEXT,
@@ -42,22 +51,20 @@ CREATE TABLE business_items (
     
     -- Question Time specific fields
     is_question_time BOOLEAN DEFAULT FALSE,
-    is_topical BOOLEAN DEFAULT FALSE,
-    question_number TEXT,
-    
-    -- Lead Minister details
-    lead_minister_id TEXT,
-    lead_minister_name TEXT,
-    lead_minister_role TEXT,
+    oral_question_number INTEGER,
 
     -- Metadata
-    reference_data JSONB, -- Standing orders, bills, dates etc
+    extracts JSONB, -- Standing orders, bills, dates etc
+    bill_stage TEXT,
     topics TEXT[],
     tags TEXT[],
     
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Add debate structure fields
+    time_allocation TEXT, -- e.g., "3 hours", "Until 5:30pm"
 );
 
 CREATE TABLE speeches (
@@ -67,25 +74,32 @@ CREATE TABLE speeches (
     -- Speaker details (for point-in-time record)
     speaker_id TEXT,
     speaker_name TEXT,
-    speaker_role TEXT,
     
     -- Speech content
+    time TIME,
     type TEXT NOT NULL,
     content TEXT NOT NULL,
-    time TIME,
     column_number INTEGER,
+    duration INTEGER, -- in minutes
     
     -- Classification
     is_procedural BOOLEAN DEFAULT FALSE,
-    is_intervention BOOLEAN DEFAULT FALSE,
     oral_question_number TEXT,
     
     -- Relationships
     in_response_to_id TEXT REFERENCES speeches(id),
-    quoted_text JSONB[],
-    reference_data JSONB,
+    extracts TEXT[],
+    chair_intervention BOOLEAN DEFAULT FALSE,
     
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    -- Add fields for speech relationships
+    speech_sequence INTEGER, -- Order within business item
+    
+    -- Lords specific fields
+    oral_qnum TEXT, -- Question number if part of oral questions
+    colnum TEXT, -- Column number in Lords Hansard
+    procedural BOOLEAN DEFAULT FALSE, -- Flag for procedural statements
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 );
 
 CREATE TABLE divisions (
@@ -101,20 +115,11 @@ CREATE TABLE divisions (
     -- Results
     ayes_count INTEGER NOT NULL,
     noes_count INTEGER NOT NULL,
-    majority INTEGER GENERATED ALWAYS AS (ABS(ayes_count - noes_count)) STORED,
-    result TEXT GENERATED ALWAYS AS (
-        CASE WHEN ayes_count > noes_count THEN 'PASSED' 
-             ELSE 'REJECTED' 
-        END
-    ) STORED,
+    result TEXT NOT NULL,
     
     -- Voting details
     votes JSONB NOT NULL, -- Detailed voting records
     tellers JSONB, -- Teller information
-    
-    -- Analysis
-    party_voting JSONB, -- Breakdown by party
-    regional_voting JSONB, -- Breakdown by region
     
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

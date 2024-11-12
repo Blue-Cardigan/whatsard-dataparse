@@ -27,8 +27,10 @@
     "dotenv": "^16.4.5",
     "json-schema-to-zod": "^2.4.1",
     "moment": "^2.30.1",
+    "node-fetch": "^3.3.2",
     "openai": "^4.57.1",
     "xmldom": "^0.6.0",
+    "yargs": "^17.7.2",
     "zod": "^3.23.8"
   }
 }

@@ -1,0 +1,3 @@
+-- Extract bill progress to store in metadata
+-- Extracts (square brackets, standing orders)
+-- Divisions

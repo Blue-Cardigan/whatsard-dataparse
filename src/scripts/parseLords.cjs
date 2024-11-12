@@ -1,626 +1,290 @@
-const { ParliamentaryBusiness, EnhancedParliamentaryProcessor, BUSINESS_TYPES, ParliamentaryProcessor } = require('./parseCommons.cjs');
+const { ParliamentaryBusiness, ParliamentaryProcessor, BUSINESS_TYPES } = require('./parseCommons.cjs');
 
-// Additional Lords-specific business types
+// Lords-specific business types
 const LORDS_BUSINESS_TYPES = {
-  LORDS_INTRODUCTIONS: {
-    DEFAULT: {
-      markers: ['Introduction:', 'was introduced']
+  QUESTIONS: {
+    ORAL: {
+      markers: ['Question'],
+      precedence: 1
+    },
+    URGENT: {
+      markers: ['Commons Urgent Question', 'Private Notice Question'],
+      precedence: 2
     }
   },
-  LORDS_OATHS: {
-    DEFAULT: {
-      markers: ['Oaths and Affirmations', 'took the oath']
-    }
-  },
-  LORDS_QUESTIONS: {
-    ORAL_QUESTIONS: {
-      markers: ['Question', 'To ask His Majesty\'s Government']
-    }
-  },
-  LORDS_LEGISLATION: {
+  BILLS: {
     FIRST_READING: {
-      markers: ['First Reading', 'Bill [HL]']
+      markers: ['First Reading'],
+      precedence: 3
     },
     SECOND_READING: {
-      markers: ['Second Reading']
+      markers: ['Second Reading'],
+      precedence: 4
+    },
+    THIRD_READING: {
+      markers: ['Third Reading'],
+      precedence: 5
+    },
+    REPORT: {
+      markers: ['Report'],
+      precedence: 6
     }
   },
-  LORDS_MOTIONS: {
-    MEMBERSHIP: {
-      markers: ['Membership Motion']
+  MOTIONS: {
+    APPROVAL: {
+      markers: ['Motion to Approve', 'Motions to Approve'],
+      precedence: 4
+    },
+    REGRET: {
+      markers: ['Motion to Regret'],
+      precedence: 4
     }
   }
 };
 
-class LordsBusinessSection extends ParliamentaryBusiness {
+// Extend base business types
+const lordsBusinessTypes = {
+  ...LORDS_BUSINESS_TYPES,
+  ...BUSINESS_TYPES
+};
+
+class LordsBusiness extends ParliamentaryBusiness {
   constructor(type, metadata = {}) {
     super(type, metadata);
-    this.peersPresent = new Set();
-    this.leadSpeaker = null;
-    this.ministerResponding = null;
-    this.royalAssent = false;
-    this.committeeStage = false;
-    
-    // New fields for tracking contributions
-    this.contributionTypes = {
-      questions: 0,
-      answers: 0,
-      statements: 0,
-      motions: 0,
-      amendments: 0,
-      withdrawals: 0
-    };
-    
-    // Enhanced minister tracking
-    this.ministerialResponses = new Map(); // minister -> [responses]
-  }
-
-  addSpeech(speech) {
-    super.addSpeech(speech);
-    
-    if (speech.speakerId) {
-      this.peersPresent.add(speech.speakerId);
-    }
-
-    // Track contribution types
-    this.trackContributionType(speech);
-    
-    // Enhanced minister tracking
-    if (speech.type === 'Start Answer' && this.isMinisterialSpeech(speech)) {
-      const responses = this.ministerialResponses.get(speech.speakerName) || [];
-      responses.push({
-        time: speech.time,
-        content: speech.content,
-        role: this.extractMinisterialRole(speech.speakerName)
-      });
-      this.ministerialResponses.set(speech.speakerName, responses);
-    }
-  }
-
-  trackContributionType(speech) {
-    switch (speech.type) {
-      case 'Start Question':
-        this.contributionTypes.questions++;
-        break;
-      case 'Start Answer':
-        this.contributionTypes.answers++;
-        break;
-      case 'Start Speech':
-        if (this.isMotionSpeech(speech)) {
-          this.contributionTypes.motions++;
-        } else {
-          this.contributionTypes.statements++;
-        }
-        break;
-      // Add other types as needed
-    }
-  }
-
-  isMinisterialSpeech(speech) {
-    const ministerialTitles = [
-      'Minister',
-      'Secretary of State',
-      'Parliamentary Under-Secretary',
-      'Lord Chancellor'
-    ];
-    return ministerialTitles.some(title => 
-      speech.speakerRole?.includes(title)
-    );
-  }
-
-  extractMinisterialRole(name) {
-    // Enhanced role extraction
-    const rolePatterns = [
-      /Minister (?:of|for) (?:State for )?([^,]+)/,
-      /Parliamentary Under[- ]Secretary of State(?:, ([^,]+))?/,
-      /Secretary of State for ([^,]+)/
-    ];
-
-    for (const pattern of rolePatterns) {
-      const match = name.match(pattern);
-      if (match) return match[1]?.trim() || match[0];
-    }
-    return null;
-  }
-
-  finalize() {
-    return {
-      ...super.finalize(),
-      contributionTypes: this.contributionTypes,
-      ministerialParticipation: Array.from(this.ministerialResponses.entries())
-        .map(([minister, responses]) => ({
-          name: minister,
-          role: this.extractMinisterialRole(minister),
-          responseCount: responses.length,
-          responses: responses
-        }))
-    };
-  }
-
-  isMotionSpeech(node) {
-    // Check for pwmotiontext paragraphs
-    const paragraphs = Array.from(node.getElementsByTagName('p'));
-    
-    // Check for both pwmotiontext and motion introduction format
-    return paragraphs.some(p => 
-      p.getAttribute('pwmotiontext') === 'unrecognized' ||
-      (p === paragraphs[0] && p.textContent.trim().startsWith('Moved by'))
-    );
-  }
-
-  extractMotions(node, speech) {
-    const paragraphs = Array.from(node.getElementsByTagName('p'));
-    const motions = [];
-    let currentMotion = null;
-
-    paragraphs.forEach(p => {
-      const text = p.textContent.trim();
-      
-      // Start new motion when "Moved by" is found
-      if (text.startsWith('Moved by')) {
-        if (currentMotion) {
-          motions.push(currentMotion);
-        }
-        currentMotion = {
-          text: [],
-          mover: text.replace('Moved by', '').trim(),
-          status: 'PROPOSED',
-          time: speech.time
-        };
-      } 
-      // Add text to current motion if it exists
-      else if (currentMotion && p.getAttribute('pwmotiontext') === 'unrecognized') {
-        currentMotion.text.push(text);
-      }
-    });
-
-    // Add final motion if exists
-    if (currentMotion) {
-      motions.push(currentMotion);
-    }
-
-    // Add amendment details if applicable
-    const precedingHeading = this.getPrecedingHeading(node);
-    if (precedingHeading?.textContent.includes('Amendment')) {
-      motions.forEach(motion => {
-        motion.type = 'AMENDMENT';
-        motion.number = precedingHeading.textContent.trim().split(' ')[1];
-      });
-    }
-
-    return motions;
-  }
-}
-
-class LordsQuestionTime extends LordsBusinessSection {
-  constructor(metadata = {}) {
-    super({ category: 'LORDS_QUESTIONS', type: 'ORAL' }, metadata);
-    this.questioner = null;
-    this.supplementaryQuestioners = [];
-    this.questionGroups = [];
-    this.currentGroup = null;
-    this.isPrivateNotice = false;
-    this.isUrgent = false;
-  }
-
-  addSpeech(speech) {
-    super.addSpeech(speech);
-
-    if (speech.type === 'Start Speech' && !this.questioner) {
-      this.questioner = speech.speakerName;
-    } else if (speech.type === 'Start Question' && !this.currentGroup) {
-      this.startNewQuestionGroup(speech);
-    } else if (this.currentGroup) {
-      if (speech.type === 'Start Answer') {
-        this.currentGroup.ministerAnswer = speech;
-      } else if (speech.type === 'Start Question') {
-        this.currentGroup.supplementaries.push({
-          question: speech,
-          answer: null
-        });
-      } else if (speech.type === 'Start Speech') {
-        this.currentGroup.speakerInterventions.push(speech);
-      }
-    }
-  }
-
-  startNewQuestionGroup(speech) {
-    this.finalizeCurrentQuestionGroup();
-    this.currentGroup = {
-      mainQuestion: speech,
-      ministerAnswer: null,
-      supplementaries: [],
-      speakerInterventions: []
-    };
-    this.questionGroups.push(this.currentGroup);
-  }
-
-  finalizeCurrentQuestionGroup() {
-    if (this.currentGroup) {
-      // Clean up any incomplete supplementaries
-      this.currentGroup.supplementaries = this.currentGroup.supplementaries.filter(
-        supp => supp.question && supp.answer
-      );
-      this.currentGroup = null;
-    }
-  }
-
-  finalize() {
-    this.finalizeCurrentQuestionGroup();
-    return {
-      questioner: this.questioner,
-      supplementaryQuestioners: this.supplementaryQuestioners,
-      questionGroups: this.questionGroups,
-      isPrivateNotice: this.isPrivateNotice,
-      isUrgent: this.isUrgent
-    };
-  }
-}
-
-class LordsLegislativeStage extends LordsBusinessSection {
-  constructor(type, metadata = {}) {
-    super(type, metadata);
-    this.amendments = [];
+    this.questions = [];
     this.divisions = [];
-    this.royalPrerogative = false;
   }
 
-  processDivision(division) {
-    const divisionRecord = {
-      id: division.id,
-      number: division.number,
-      date: division.date,
-      time: division.time,
-      counts: division.counts,
-      contents: [],
-      notContents: [],
-      tellers: {
-        contents: [],
-        notContents: []
-      }
-    };
-    this.divisions.push(divisionRecord);
+  addQuestion(question) {
+    this.questions.push(question);
+  }
+
+  addAmendment(amendment) {
+    this.amendments.push(amendment);
   }
 }
 
-class LordsParliamentaryProcessor extends EnhancedParliamentaryProcessor {
+// Add this new utility function
+function cleanTitle(title) {
+  return title
+    // Remove "\n - Question" suffix
+    .replace(/\n\s*-\s*Question$/, '')
+    // Replace "[HL]" with empty string
+    .replace(/\s*\[HL\]/, '')
+    // Clean up any double spaces
+    .replace(/\s+/g, ' ')
+    // Trim any whitespace
+    .trim();
+}
+
+class LordsDivisionProcessor {
+  static processDivision(node) {
+    if (node.nodeName !== 'division') return null;
+    
+    return {
+      id: node.getAttribute('id'),
+      date: node.getAttribute('divdate'),
+      number: node.getAttribute('divnumber'),
+      time: node.getAttribute('time'),
+      counts: LordsDivisionProcessor.extractCounts(node),
+      votes: LordsDivisionProcessor.extractVotes(node)
+    };
+  }
+
+  static extractCounts(node) {
+    for (const child of node.childNodes) {
+      if (child.nodeName === 'divisioncount') {
+        return {
+          content: parseInt(child.getAttribute('content')),
+          notContent: parseInt(child.getAttribute('not-content'))
+        };
+      }
+    }
+    return {
+      content: 0,
+      notContent: 0
+    };
+  }
+
+  static extractVotes(node) {
+    const votes = {
+      content: [],
+      notContent: []
+    };
+
+    for (const child of node.childNodes) {
+      if (child.nodeName === 'lordlist') {
+        const voteType = child.getAttribute('vote');
+        for (const lord of child.childNodes) {
+          if (lord.nodeName === 'lord') {
+            const vote = {
+              memberId: lord.getAttribute('person_id'),
+              name: lord.textContent.trim()
+            };
+            
+            if (voteType === 'content') {
+              votes.content.push(vote);
+            } else if (voteType === 'not-content') {
+              votes.notContent.push(vote);
+            }
+          }
+        }
+      }
+    }
+
+    return votes;
+  }
+}
+
+class LordsProcessor extends ParliamentaryProcessor {
   constructor(config = {}) {
     super(config);
-    this.businessTypes = {
-      ...BUSINESS_TYPES,
-      ...LORDS_BUSINESS_TYPES
-    };
+    this.businessTypes = lordsBusinessTypes;
+    this.currentQuestion = null;
   }
 
+  // Override the createBusinessInstance method
   createBusinessInstance(type, metadata) {
-    switch (type.category) {
-      case 'LORDS_QUESTIONS':
-        return new LordsQuestionTime(metadata);
-      case 'LORDS_LEGISLATION':
-        return new LordsLegislativeStage(type, metadata);
-      default:
-        return new LordsBusinessSection(type, metadata);
+    // Clean the title if one exists
+    if (metadata?.title) {
+      metadata.title = cleanTitle(metadata.title);
     }
-  }
-
-  processMajorHeading(node) {
-    const content = node.textContent.trim();
-    const type = this.determineBusinessType(node);
     
-    if (this.shouldCreateNewBusiness(type, content)) {
-      this.finalizeCurrentBusiness();
-      this.currentBusiness = this.createBusinessInstance(type, {
-        id: node.getAttribute('id'),
-        title: content
-      });
-    }
+    return new LordsBusiness({
+      type: type
+    }, metadata);
   }
 
   processSpeech(node) {
-    if (!this.currentBusiness) return;
-
     const speech = this.extractSpeech(node);
     
-    // Extract quoted text
-    speech.quotedText = this.extractQuotedText(node);
+    // Handle Lords Question patterns
+    if (this.currentBusiness?.type.category === 'QUESTIONS') {
+      switch(speech.type) {
+        case 'Start Question':
+          this.currentQuestion = {
+            askedBy: speech.speakerName,
+            text: speech.content,
+            answers: [],
+            supplementaries: []
+          };
+          this.currentBusiness.addQuestion(this.currentQuestion);
+          break;
+          
+        case 'Start Answer':
+          if (this.currentQuestion) {
+            this.currentQuestion.answers.push({
+              answeredBy: speech.speakerName,
+              text: speech.content
+            });
+          }
+          break;
+          
+        default:
+          // Handle supplementary questions
+          if (this.currentQuestion && speech.type !== 'Start Answer') {
+            this.currentQuestion.supplementaries.push({
+              speakerName: speech.speakerName,
+              text: speech.content
+            });
+          }
+      }
+    } else {
+      super.processSpeech(node);
+    }
+  }
+
+  processAmendment(node) {
+    if (!this.currentBusiness) return;
+
+    const amendmentMatch = node.textContent.match(/Amendment (\d+)/);
+    if (amendmentMatch) {
+      const amendment = {
+        number: amendmentMatch[1],
+        text: node.textContent,
+        mover: node.getAttribute('speakername'),
+        status: this.determineAmendmentStatus(node)
+      };
+      this.currentBusiness.addAmendment(amendment);
+    }
+  }
+
+  determineAmendmentStatus(node) {
+    const text = node.textContent.toLowerCase();
+    if (text.includes('amendment agreed')) return 'AGREED';
+    if (text.includes('amendment withdrawn')) return 'WITHDRAWN';
+    if (text.includes('amendment not moved')) return 'NOT_MOVED';
+    return 'PROPOSED';
+  }
+
+  processDivision(node, context) {
+    // Lords implementation uses LordsDivisionProcessor
+    const division = LordsDivisionProcessor.processDivision(node);
     
-    // Enhanced metadata
-    speech.metadata = {
-      peerageType: this.extractPeerageType(speech.speakerName),
-      position: this.extractPosition(speech.speakerName),
-      isMinisterial: this.isMinisterialSpeech(speech),
-      procedural: this.isProceduralContent(node)
-    };
-
-    super.processSpeech(node);
-  }
-
-  extractQuotedText(node) {
-    return Array.from(node.getElementsByTagName('p'))
-      .filter(p => p.getAttribute('class')?.includes('indent') || 
-                   p.getAttribute('class')?.includes('quote'))
-      .map(p => ({
-        text: p.textContent.trim(),
-        source: p.getAttribute('source') || null,
-        isIndented: p.getAttribute('class')?.includes('indent') || false
-      }));
-  }
-
-  isProceduralContent(node) {
-    const proceduralPhrases = [
-      'My Lords',
-      'I beg to move',
-      'The Question is',
-      'Noble Lords',
-      'with the leave of the House'
-    ];
+    // Add context information if needed
+    if (division && context) {
+      division.debate = {
+        title: context.title,
+        speech_index: context.speech_index
+      };
+    }
     
-    return proceduralPhrases.some(phrase => 
-      node.textContent.includes(phrase)
-    );
+    return division;
   }
 
-  extractPeerageType(name) {
-    if (!name) return null;
-    if (name.includes('Lord')) return 'BARON';
-    if (name.includes('Baroness')) return 'BARONESS';
-    if (name.includes('Earl')) return 'EARL';
-    if (name.includes('Viscount')) return 'VISCOUNT';
-    if (name.includes('Duke')) return 'DUKE';
-    return null;
-  }
-
-  extractPosition(name) {
-    const positions = [
-      'Lord Chancellor',
-      'Leader of the House',
-      'Lord Privy Seal',
-      'Lord Speaker'
-    ];
-    return positions.find(p => name?.includes(p)) || null;
-  }
-
+  // Modify the determineBusinessType method to prioritize Lords business types
   determineBusinessType(node) {
     const content = node.textContent.trim();
     
-    // Check for introductions
-    if (content.includes('Introduction:')) {
-      return { category: 'LORDS_INTRODUCTIONS', type: 'DEFAULT' };
-    }
-    
-    // Check for oaths
-    if (content.includes('Oaths and Affirmations')) {
-      return { category: 'LORDS_OATHS', type: 'DEFAULT' };
-    }
-    
-    // Check for questions
-    if (content.includes('Question')) {
-      return { category: 'LORDS_QUESTIONS', type: 'ORAL_QUESTIONS' };
-    }
-    
-    // Check for legislation
-    if (content.includes('Bill [HL]') && content.includes('First Reading')) {
-      return { category: 'LORDS_LEGISLATION', type: 'FIRST_READING' };
-    }
-    
-    // Check for membership motions
-    if (content.includes('Membership Motion')) {
-      return { category: 'LORDS_MOTIONS', type: 'MEMBERSHIP' };
-    }
-
-    return super.determineBusinessType(node);
-  }
-
-  isMotionSpeech(node) {
-    // Check for pwmotiontext paragraphs
-    const paragraphs = Array.from(node.getElementsByTagName('p'));
-    
-    // Check for both pwmotiontext and motion introduction format
-    return paragraphs.some(p => 
-      p.getAttribute('pwmotiontext') === 'unrecognized' ||
-      (p === paragraphs[0] && p.textContent.trim().startsWith('Moved by'))
-    );
-  }
-
-  extractMotion(node, speech) {
-    const paragraphs = Array.from(node.getElementsByTagName('p'));
-    const motionParagraphs = paragraphs.filter(p => 
-      p.getAttribute('pwmotiontext') === 'unrecognized' || 
-      (!p.getAttribute('class')?.includes('italic') && 
-       !p.textContent.trim().startsWith('Moved by'))
-    );
-
-    // Skip if no motion text found
-    if (motionParagraphs.length === 0) return null;
-
-    let mover = speech.speakerName;
-    const firstPara = paragraphs[0]?.textContent.trim();
-    if (firstPara.startsWith('Moved by')) {
-      mover = firstPara.replace('Moved by', '').trim();
-    }
-
-    // Extract motion text, excluding procedural italic paragraphs
-    const text = motionParagraphs
-      .map(p => p.textContent.trim())
-      .filter(text => text);
-
-    // If this is an amendment, add amendment details
-    const precedingHeading = this.getPrecedingHeading(node);
-    const isAmendment = precedingHeading?.textContent.includes('Amendment');
-
-    return {
-      text,
-      mover,
-      status: 'PROPOSED',
-      time: speech.time,
-      ...(isAmendment && {
-        type: 'AMENDMENT',
-        number: precedingHeading.textContent.trim().split(' ')[1]
-      })
-    };
-  }
-
-  getPrecedingHeading(node) {
-    let currentNode = node.previousSibling;
-    while (currentNode) {
-      if (currentNode.nodeName.toLowerCase().includes('heading')) {
-        return currentNode;
-      }
-      currentNode = currentNode.previousSibling;
-    }
-    return null;
-  }
-
-  extractMotions(node, speech) {
-    const paragraphs = Array.from(node.getElementsByTagName('p'));
-    const motions = [];
-    let currentMotion = null;
-
-    paragraphs.forEach(p => {
-      const text = p.textContent.trim();
-      
-      // Start new motion when "Moved by" is found
-      if (text.startsWith('Moved by')) {
-        if (currentMotion) {
-          motions.push(currentMotion);
+    // First check Lords-specific business types
+    for (const [category, types] of Object.entries(LORDS_BUSINESS_TYPES)) {
+      for (const [type, config] of Object.entries(types)) {
+        if (config.markers.some(marker => content.includes(marker))) {
+          // For Bills, determine the specific reading/stage
+          if (category === 'BILLS') {
+            return { 
+              category: 'BILLS', 
+              type: type // Will be FIRST_READING, SECOND_READING etc.
+            };
+          }
+          return { category, type };
         }
-        currentMotion = {
-          text: [],
-          mover: text.replace('Moved by', '').trim(),
-          status: 'PROPOSED',
-          time: speech.time
-        };
-      } 
-      // Add text to current motion if it exists
-      else if (currentMotion && p.getAttribute('pwmotiontext') === 'unrecognized') {
-        currentMotion.text.push(text);
       }
-    });
-
-    // Add final motion if exists
-    if (currentMotion) {
-      motions.push(currentMotion);
     }
 
-    // Add amendment details if applicable
-    const precedingHeading = this.getPrecedingHeading(node);
-    if (precedingHeading?.textContent.includes('Amendment')) {
-      motions.forEach(motion => {
-        motion.type = 'AMENDMENT';
-        motion.number = precedingHeading.textContent.trim().split(' ')[1];
-      });
-    }
-
-    return motions;
-  }
-
-  determineSpeechType(node, speech) {
-    if (this.isMotionText(node)) return 'motion';
-    if (node.querySelector('p[pwmotiontext]')) return 'motion';
-    if (speech.content?.toLowerCase().includes('amendment')) return 'amendment';
-    return 'speech';
-  }
-
-  isMotionText(node) {
-    const paragraphs = Array.from(node.getElementsByTagName('p'));
-    return paragraphs.some(p => 
-      p.getAttribute('pwmotiontext') === 'unrecognized' ||
-      (p === paragraphs[0] && p.textContent.trim().startsWith('Moved by'))
-    );
-  }
-
-  extractQuotedText(node) {
-    return Array.from(node.getElementsByTagName('p'))
-      .filter(p => p.getAttribute('class')?.includes('indent') || 
-                   p.getAttribute('class')?.includes('quote'))
-      .map(p => ({
-        text: p.textContent.trim(),
-        source: p.getAttribute('source') || null,
-        isIndented: p.getAttribute('class')?.includes('indent') || false
-      }));
-  }
-
-  isProceduralContent(node) {
-    const proceduralPhrases = [
-      'My Lords',
-      'I beg to move',
-      'The Question is',
-      'Noble Lords',
-      'with the leave of the House'
-    ];
-    
-    return proceduralPhrases.some(phrase => 
-      node.textContent.includes(phrase)
-    );
-  }
-
-  extractPeerageType(name) {
-    if (!name) return null;
-    if (name.includes('Lord')) return 'BARON';
-    if (name.includes('Baroness')) return 'BARONESS';
-    if (name.includes('Earl')) return 'EARL';
-    if (name.includes('Viscount')) return 'VISCOUNT';
-    if (name.includes('Duke')) return 'DUKE';
-    return null;
-  }
-
-  extractPosition(name) {
-    const positions = [
-      'Lord Chancellor',
-      'Leader of the House',
-      'Lord Privy Seal',
-      'Lord Speaker'
-    ];
-    return positions.find(p => name?.includes(p)) || null;
-  }
-
-  determineBusinessType(node) {
-    const content = node.textContent.trim();
-    
-    // Check for introductions
-    if (content.includes('Introduction:')) {
-      return { category: 'LORDS_INTRODUCTIONS', type: 'DEFAULT' };
-    }
-    
-    // Check for oaths
-    if (content.includes('Oaths and Affirmations')) {
-      return { category: 'LORDS_OATHS', type: 'DEFAULT' };
-    }
-    
-    // Check for questions
-    if (content.includes('Question')) {
-      return { category: 'LORDS_QUESTIONS', type: 'ORAL_QUESTIONS' };
-    }
-    
-    // Check for legislation
-    if (content.includes('Bill [HL]') && content.includes('First Reading')) {
-      return { category: 'LORDS_LEGISLATION', type: 'FIRST_READING' };
-    }
-    
-    // Check for membership motions
-    if (content.includes('Membership Motion')) {
-      return { category: 'LORDS_MOTIONS', type: 'MEMBERSHIP' };
-    }
-
+    // If no Lords-specific type found, fall back to Commons types
     return super.determineBusinessType(node);
   }
 
-  isMinisterialSpeech(speakerName, speakerRole) {
-    const ministerialTitles = [
-      'Minister',
-      'Secretary of State',
-      'Parliamentary Under-Secretary',
-      'Lord Chancellor'
-    ];
-    return ministerialTitles.some(title => 
-      speakerRole?.includes(title) || speakerName?.includes(title)
-    );
+  processMinorHeading(node) {
+    const content = node.textContent.trim();
+    
+    // Check if this is an amendment heading
+    if (content.toLowerCase().includes('amendment')) {
+      if (this.currentBusiness) {
+        const speech = {
+          speakerId: null,
+          speakerName: null,
+          time: node.getAttribute('time'),
+          type: content, // Store the amendment number as the type
+          content: '',
+          extracts: [],
+          procedural: false,
+          colnum: node.getAttribute('colnum')
+        };
+        
+        this.currentBusiness.addSpeech(speech);
+      }
+    } else {
+      // Handle other minor headings normally
+      super.processMinorHeading(node);
+    }
   }
 }
 
 module.exports = {
-  LordsParliamentaryProcessor,
-  LORDS_BUSINESS_TYPES,
-  LordsQuestionTime,
-  LordsLegislativeStage
+  LordsBusiness,
+  LordsProcessor,
+  LordsDivisionProcessor,
+  LORDS_BUSINESS_TYPES
 };

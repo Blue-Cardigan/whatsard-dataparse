@@ -1,5 +1,38 @@
 // Constants and types
 const BUSINESS_TYPES = {
+  STATEMENTS: {
+    SPEAKER: {
+      markers: ["Speaker's Statement"],
+      precedence: 1
+    },
+    MINISTERIAL: {
+      markers: ['Statement'],
+      precedence: 3
+    }
+  },
+  PROCEDURAL: {
+    STANDING_ORDERS: {
+      markers: ['Standing Order No.'],
+      precedence: 1
+    },
+    POINTS_OF_ORDER: {
+      markers: ['Order'],
+      precedence: 2
+    }
+  },
+  DEBATES: {
+    MAIN: {
+      markers: ['Motion', 'Debate', 'Ways and Means'],
+      precedence: 6
+    },
+    ADJOURNMENT: {
+      markers: ['Adjournment'],
+      precedence: 7
+    }
+  },
+}
+
+const COMMONS_BUSINESS_TYPES = {
   ORAL_QUESTIONS: {
     DEPARTMENTAL: {
       markers: ['Oral Answers to Questions'],
@@ -20,88 +53,70 @@ const BUSINESS_TYPES = {
       requiresAllMarkers: true
     }
   },
-  STATEMENTS: {
-    MINISTERIAL: {
-      markers: ['Statement'],
-      precedence: 3
-    },
-    URGENT: {
-      markers: ['(Urgent Question):'],
-      precedence: 3
-    },
-    SPEAKER: {
-      markers: ["Speaker's Statement"],
-      precedence: 1
-    }
-  },
   LEGISLATION: {
     BILLS: {
       markers: ['Bill', 'First Reading', 'Second Reading'],
       precedence: 4
-    },
-    STATUTORY_INSTRUMENTS: {
-      markers: ['Statutory Instrument', 'Order', 'Regulations'],
-      precedence: 5
     }
   },
-  PROCEDURAL: {
-    STANDING_ORDERS: {
-      markers: ['Standing Order No.'],
-      precedence: 1
-    },
-    PROVISIONAL_COLLECTION: {
-      markers: ['Provisional Collection of Taxes'],
-      precedence: 1
-    },
-    POINTS_OF_ORDER: {
-      markers: ['Point of Order'],
-      precedence: 2
-    }
-  },
-  DEBATES: {
-    MAIN: {
-      markers: ['Motion', 'Debate'],
+  BUSINESS_WITHOUT_DEBATE: {
+    DELEGATED_LEGISLATION: {
+      markers: ['Delegated Legislation'],
       precedence: 6
     },
-    ADJOURNMENT: {
-      markers: ['Adjournment'],
-      precedence: 7
-    },
-    WESTMINSTER_HALL: {
-      markers: ['Westminster Hall'],
-      precedence: 8
+    OTHER: {
+      markers: ['Business without Debate'],
+      precedence: 6
     }
   }
 };
 
+const businessTypes = {
+  ...COMMONS_BUSINESS_TYPES,
+  ...BUSINESS_TYPES
+};
+
 // Core classes
 class ParliamentaryContext {
-  constructor() {
+  constructor(processor) {
+    this.processor = processor;
     this.currentBusiness = null;
-    this.procedural = new ProceduralContext();
+    this.procedural = new ProceduralContext(processor);
     this.timing = new TimingContext();
     this.speakers = new Set();
-    this.references = [];
+    this.currentDebate = {
+      title: null,
+      type: null,
+      subheadings: [],
+      divisions: []
+    };
   }
 
   updateContext(node) {
     this.procedural.updateContext(node);
     this.timing.updateContext(node);
-    this.updateReferences(node);
+    this.updateDebateContext(node);
   }
 
-  updateReferences(node) {
-    const refs = extractReferences(node);
-    if (refs.length) {
-      this.references.push(...refs);
+  updateDebateContext(node) {
+    switch(node.nodeName) {
+      case 'major-heading':
+        this.currentDebate.title = node.textContent.trim();
+        break;
+      case 'minor-heading':
+        this.currentDebate.subheadings.push({
+          id: node.getAttribute('id'),
+          text: node.textContent.trim(),
+          time: node.getAttribute('time')
+        });
+        break;
     }
   }
 }
-
 class ProceduralContext {
-  constructor() {
+  constructor(processor) {
+    this.processor = processor;
     this.currentStandingOrder = null;
-    this.motionStatus = null;
     this.votingStatus = null;
     this.amendments = [];
     this.divisions = [];
@@ -109,7 +124,6 @@ class ProceduralContext {
 
   updateContext(node) {
     this.updateStandingOrder(node);
-    this.updateMotionStatus(node);
     this.updateVotingStatus(node);
     this.processAmendments(node);
   }
@@ -121,32 +135,17 @@ class ProceduralContext {
     }
   }
 
-  updateMotionStatus(node) {
-    if (node.textContent.includes('Motion made')) {
-      this.motionStatus = 'PROPOSED';
-    } else if (node.textContent.includes('Question put')) {
-      this.motionStatus = 'VOTING';
-    } else if (node.textContent.includes('Question agreed to')) {
-      this.motionStatus = 'AGREED';
-    }
-  }
-
   updateVotingStatus(node) {
-    if (node.textContent.includes('Division')) {
+    if (node.nodeName === 'division') {
       this.votingStatus = 'DIVISION';
-      this.processDivision(node);
+      const division = this.processor.processDivision(node, {
+        title: this.processor.currentBusiness?.metadata?.title || null,
+        speech_index: this.processor.currentBusiness?.speech_index || null
+      });
+      if (division) {
+        this.divisions.push(division);
+      }
     }
-  }
-
-  processDivision(node) {
-    if (node.nodeType !== 1) return;  // Skip if not element node
-    
-    const division = {
-      time: node.getAttribute('time'),
-      ayes: extractAyes(node),
-      noes: extractNoes(node)
-    };
-    this.divisions.push(division);
   }
 
   processAmendments(node) {
@@ -170,7 +169,6 @@ class ProceduralContext {
     }
   }
 }
-
 class TimingContext {
   constructor() {
     this.currentTime = null;
@@ -190,9 +188,15 @@ class TimingContext {
 
   getDuration() {
     if (this.previousTime && this.currentTime) {
-      return calculateDuration(this.previousTime, this.currentTime);
+      return this.calculateDuration(this.previousTime, this.currentTime);
     }
     return null;
+  }
+
+  calculateDuration(start, end) {
+    const startTime = new Date(`1970-01-01T${start}`);
+    const endTime = new Date(`1970-01-01T${end}`);
+    return (endTime - startTime) / 1000 / 60; // Duration in minutes
   }
 }
 
@@ -200,89 +204,18 @@ class ParliamentaryBusiness {
   constructor(type, metadata = {}) {
     this.type = type;
     this.metadata = metadata;
-    this.speeches = [];
-    this.children = [];
-    this.parent = null;
     this.procedural = [];
     this.references = [];
-    this.motions = [];
+    this.speeches = [];
+    this.speech_index = 0; // Add speech index counter
   }
 
   addSpeech(speech) {
-    this.speeches.push(speech);
-  }
-
-  addChild(child) {
-    this.children.push(child);
-    child.parent = this;
-  }
-
-  getFullHierarchy() {
-    const hierarchy = [this];
-    let current = this;
-    while (current.parent) {
-      hierarchy.unshift(current.parent);
-      current = current.parent;
-    }
-    return hierarchy;
-  }
-
-  addMotion(motion) {
-    this.motions.push(motion);
-  }
-}
-
-// Add the new SpeechGroup class
-class SpeechGroup {
-  constructor(type) {
-    this.type = type;
-    this.initialQuestion = null;
-    this.ministerAnswer = null;
-    this.supplementaries = [];
-    this.procedurals = [];
-    this.startTime = null;
-    this.endTime = null;
-  }
-
-  addSpeech(speech) {
-    switch(speech.type) {
-      case 'Start Question':
-        this.initialQuestion = speech;
-        this.startTime = speech.time;
-        break;
-      case 'Start Answer':
-        this.ministerAnswer = speech;
-        break;
-      case 'Start SupplementaryQuestion':
-        this.supplementaries.push({
-          question: speech,
-          answer: null
-        });
-        break;
-      case 'Start Answer':
-      case 'Continuation Answer':
-        if (this.supplementaries.length > 0 && !this.supplementaries[this.supplementaries.length - 1].answer) {
-          this.supplementaries[this.supplementaries.length - 1].answer = speech;
-        }
-        break;
-      default:
-        if (this.isProceduralSpeech(speech)) {
-          this.procedurals.push(speech);
-        }
-    }
-    this.endTime = speech.time;
-  }
-
-  isProceduralSpeech(speech) {
-    const proceduralIndicators = [
-      'I call',
-      'Order',
-      'Point of Order',
-      'The House will now proceed'
-    ];
-    return proceduralIndicators.some(indicator => 
-      speech.content.includes(indicator)
-    );
+    // Add index to speech before pushing
+    this.speeches.push({
+      ...speech,
+      index: this.speech_index++
+    });
   }
 }
 
@@ -290,10 +223,13 @@ class SpeechGroup {
 class ParliamentaryProcessor {
   constructor(config = {}) {
     this.config = config;
-    this.context = new ParliamentaryContext();
+    this.context = new ParliamentaryContext(this);
     this.currentBusiness = null;
     this.allBusiness = [];
     this.inOralQuestions = false;
+    this.metadata = {
+      royalAssent: []  // Add this to store Royal Assent bills
+    };
   }
 
   process(xmlDoc) {
@@ -306,8 +242,23 @@ class ParliamentaryProcessor {
     }
   }
 
+
+  validateDocument(xmlDoc) {
+    if (!xmlDoc || !xmlDoc.documentElement) {
+      throw new Error('Invalid XML document');
+    }
+  }
+
   processNode(node) {
     this.context.updateContext(node);
+
+    // First check for supermajor heading start
+    if (node.nodeName === 'major-heading' || node.nodeName === 'oral-heading') {
+      const supermajorHeading = this.supermajorHeadingStart(node);
+      if (supermajorHeading) {
+        this.currentSupermajorHeading = supermajorHeading;
+      }
+    }
 
     switch (node.nodeName) {
       case 'oral-heading':
@@ -333,58 +284,17 @@ class ParliamentaryProcessor {
   processOralHeading(node) {
     this.finalizeCurrentBusiness();
     this.inOralQuestions = true;
-    this.currentBusiness = new QuestionTimeSection({
+    
+    // Create new business instance for oral questions
+    this.currentBusiness = new ParliamentaryBusiness({
       category: 'ORAL_QUESTIONS',
       type: 'DEPARTMENTAL'
     }, {
       id: node.getAttribute('id'),
       title: node.textContent.trim(),
-      departments: []
+      departments: [], // Initialize empty departments array
+      supermajorHeading: []
     });
-  }
-
-  processMajorHeading(node) {
-    const content = node.textContent.trim();
-    
-    if (this.inOralQuestions) {
-      if (!content.includes('was asked—') && !this.isOralQuestionsDepartment(content)) {
-        this.inOralQuestions = false;
-        this.finalizeCurrentBusiness();
-        
-        const type = this.determineBusinessType(node);
-        this.currentBusiness = new ParliamentaryBusiness(type, {
-          id: node.getAttribute('id'),
-          title: content
-        });
-      } else {
-        const departmentMeta = {
-          name: content,
-          id: node.getAttribute('id'),
-          minister: null,
-          topics: []
-        };
-        
-        const department = {
-          ...departmentMeta,
-          currentTopic: null,
-          questions: [],
-          currentGroup: null
-        };
-
-        this.currentBusiness.metadata.departments.push(departmentMeta);
-        this.currentBusiness.currentDepartment = department;
-      }
-      return;
-    }
-
-    const type = this.determineBusinessType(node);
-    if (this.shouldCreateNewBusiness(type, content)) {
-      this.finalizeCurrentBusiness();
-      this.currentBusiness = new ParliamentaryBusiness(type, {
-        id: node.getAttribute('id'),
-        title: content
-      });
-    }
   }
 
   isOralQuestionsDepartment(content) {
@@ -407,95 +317,219 @@ class ParliamentaryProcessor {
     );
   }
 
-  processSpeech(node) {
-    if (!this.currentBusiness) return;
 
-    const speech = this.extractSpeech(node);
+  processMajorHeading(node) {
+    const content = node.textContent.trim();
     
-    if (this.isMotionSpeech(node)) {
-      const motion = {
-        text: this.extractMotionText(node),
-        mover: speech.speakerName,
-        status: 'PROPOSED',
-        time: speech.time
-      };
-      this.currentBusiness.addMotion(motion);
-    }
+    // Add Royal Assent check
+    if (content === 'Royal Assent') {
+      this.finalizeCurrentBusiness();
+      const type = { category: 'PROCEDURAL', type: 'ROYAL_ASSENT' };
+      this.currentBusiness = this.createBusinessInstance(type, {
+        id: node.getAttribute('id'),
+        title: content,
+        supermajorHeading: [this.currentSupermajorHeading],
+        royalAssentBills: [] // Initialize empty array for bills
+      });
+      
+      // Find the following speech node and process Royal Assent bills
+      let nextNode = node.nextSibling;
+      while (nextNode && nextNode.nodeType !== 1) {
+        nextNode = nextNode.nextSibling;
+      }
 
+      if (nextNode && nextNode.nodeName === 'speech') {
+        const bills = [];
+        
+        // Process each paragraph in the speech
+        for (const child of nextNode.childNodes) {
+          if (child.nodeName === 'p') {
+            const text = child.textContent.trim();
+            
+            // Skip notification paragraphs
+            if (text.includes('Royal Assent Act') || 
+                text.includes('following Acts were given') ||
+                text.includes('I have to notify')) {
+              continue;
+            }
+            
+            // Remove trailing comma and clean up text
+            const cleanedText = text.replace(/,\s*$/, '').trim();
+            
+            // Only add if there's actual content
+            if (cleanedText) {
+              bills.push({
+                name: cleanedText,
+                time: node.getAttribute('time') || null
+              });
+            }
+          }
+        }
+
+        // Add bills to both business metadata and global metadata
+        this.currentBusiness.metadata.royalAssentBills = bills;
+        this.metadata.royalAssent.push(...bills);
+      }
+      
+      return;
+    }
+    
     if (this.inOralQuestions) {
-      this.processOralQuestionSpeech(speech);
-    } else {
-      this.currentBusiness.addSpeech(speech);
-    }
+      if (!content.includes('was asked—') && !this.isOralQuestionsDepartment(content)) {
+        this.inOralQuestions = false;
+        this.finalizeCurrentBusiness();
+        
+        const type = this.determineBusinessType(node);
+        this.currentBusiness = new ParliamentaryBusiness(type, {
+          id: node.getAttribute('id'),
+          title: content,
+          supermajorHeading: [this.currentSupermajorHeading]
+        });
+      } else if (this.currentBusiness) {
+        const departmentMeta = {
+          name: content,
+          id: node.getAttribute('id'),
+          minister: null,
+          topics: []
+        };
+        
+        const department = {
+          ...departmentMeta,
+          currentTopic: null,
+          questions: [],
+          currentGroup: null
+        };
 
-    if (speech.speakerId) {
-      this.context.speakers.add(speech.speakerId);
-    }
-  }
-
-  processOralQuestionSpeech(speech) {
-    const department = this.currentBusiness.currentDepartment;
-    if (!department) return;
-
-    if (speech.content?.includes('was asked—')) {
-      const ministerMatch = speech.content.match(/The (.+?) was asked/);
-      if (ministerMatch) {
-        department.minister = ministerMatch[1].trim();
+        this.currentBusiness.metadata.departments.push(departmentMeta);
+        this.currentBusiness.currentDepartment = department;
       }
       return;
     }
 
-    switch(speech.type) {
-      case 'Start Question':
-        const questionGroup = {
-          topic: department.currentTopic?.text,
-          mainQuestion: speech,
-          supplementaries: [],
-          answers: []
-        };
-        department.questions.push(questionGroup);
-        department.currentGroup = questionGroup;
-        break;
+    // If we have a current supermajor heading, create new business with it
+    if (this.currentSupermajorHeading) {
+      this.finalizeCurrentBusiness();
+      const type = this.determineBusinessType(node);
+      this.currentBusiness = this.createBusinessInstance(type, {
+        id: node.getAttribute('id'),
+        title: content,
+        supermajorHeading: [this.currentSupermajorHeading]
+      });
+      
+      // Clear supermajor heading if this isn't part of a continuing section
+      // if (!this.isPartOfSupermajorSection(content)) {
+      //   this.currentSupermajorHeading = null;
+      // }
+      return;
+    }
 
-      case 'Start Answer':
-        if (department.currentGroup) {
-          if (department.currentGroup.supplementaries.length > 0) {
-            const lastSupplementary = department.currentGroup.supplementaries[department.currentGroup.supplementaries.length - 1];
-            if (!lastSupplementary.answer) {
-              lastSupplementary.answer = speech;
-            }
-          } else {
-            department.currentGroup.answers.push(speech);
-          }
-        }
-        break;
-
-      case 'Start SupplementaryQuestion':
-        if (department.currentGroup) {
-          department.currentGroup.supplementaries.push({
-            question: speech,
-            answer: null
-          });
-        }
-        break;
+    const supermajorHeading = this.supermajorHeadingStart(node);
+    
+    if (supermajorHeading) {
+      this.inSupermajorSection = true;
+      this.finalizeCurrentBusiness();
+      const type = this.determineBusinessType(node);
+      this.currentBusiness = this.createBusinessInstance(type, {
+        id: node.getAttribute('id'),
+        title: content,
+        supermajorHeading: [supermajorHeading]
+      });
+    } else {
+      // Regular major heading processing
+      const type = this.determineBusinessType(node);
+      if (this.shouldCreateNewBusiness(type, content)) {
+        this.finalizeCurrentBusiness();
+        this.currentBusiness = this.createBusinessInstance(type, {
+          id: node.getAttribute('id'),
+          title: content,
+          // regular heading
+          supermajorHeading: [supermajorHeading]
+        });
+      } else if (this.currentBusiness) {
+        this.currentBusiness.metadata.subtitle = content;
+      }
     }
   }
 
-  extractSpeech(node) {
-    return {
-      speakerId: node.getAttribute('person_id'),
-      speakerName: node.getAttribute('speakername'),
-      time: node.getAttribute('time'),
-      type: node.getAttribute('type'),
-      content: this.extractSpeechContent(node),
-      procedural: this.isProceduralSpeech(node),
-      colnum: node.getAttribute('colnum'),
-      oral_qnum: node.getAttribute('oral-qnum')
+  supermajorHeadingStart(node) {
+    // Get parent's children as an array
+    const siblings = Array.from(node.parentNode.childNodes);
+    const currentIndex = siblings.indexOf(node);
+    
+    // Helper to get next element node
+    const getNextElement = (startIndex) => {
+      for (let i = startIndex + 1; i < siblings.length; i++) {
+        if (siblings[i].nodeType === 1) { // ELEMENT_NODE = 1
+          return siblings[i];
+        }
+      }
+      return null;
     };
+    
+    const nextNode = getNextElement(currentIndex);
+    const nextNextNode = nextNode ? getNextElement(siblings.indexOf(nextNode)) : null;
+    const content = node.textContent.trim();
+
+    // First check if this is an oral-heading
+    if (node.nodeName === 'oral-heading' &&
+      nextNode?.nodeName === 'major-heading') {
+      return content;
+    }
+
+    if (content.includes('Bills Presented')) {
+      return 'Bills Presented';
+    }
+    
+    // Check for Ways and Means pattern
+    const isSandwichPattern = (
+      nextNode?.nodeName === 'minor-heading' &&
+      nextNextNode?.nodeName === 'major-heading' &&
+      node.getAttribute('time') === nextNode.getAttribute('time') &&
+      node.getAttribute('time') === nextNextNode.getAttribute('time')
+    );
+
+    // Check for Business without Debate pattern
+    const isDoubleMajorHeading = (
+      nextNode?.nodeName === 'major-heading' &&
+      node.getAttribute('time') === nextNode.getAttribute('time')
+    );
+
+    // Check for known supermajor content
+    const knownTypes = {
+      'Ways and Means': 'Ways and Means',
+      'Business without Debate': 'Business without Debate',
+      'Oral Answers to Questions': 'Oral Answers to Questions'
+    };
+
+    for (const [marker, heading] of Object.entries(knownTypes)) {
+      if (content.includes(marker)) {
+        return heading;
+      }
+    }
+
+    // If any pattern matches but no specific heading was found, return the content
+    if (isSandwichPattern || isDoubleMajorHeading) {
+      return content;
+    }
+
+    return null;
   }
 
   determineBusinessType(node) {
     const content = node.textContent.trim();
+    const siblings = Array.from(node.parentNode.childNodes);
+    const currentIndex = siblings.indexOf(node);
+    // Helper to get next element node
+    const getNextElement = (startIndex) => {
+      for (let i = startIndex + 1; i < siblings.length; i++) {
+        if (siblings[i].nodeType === 1) { // ELEMENT_NODE = 1
+          return siblings[i];
+        }
+      }
+      return null;
+    };
+    
+    const nextNode = getNextElement(currentIndex);
     
     if (content.match(/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*:\s+[A-Z][a-z]/)) {
       return {
@@ -504,12 +538,37 @@ class ParliamentaryProcessor {
       };
     }
 
+    if (/\w+\s*\(.*\)/.test(content)) {
+      return { category: 'LEGISLATION', type: 'BILLS' };
+    }
+
+    if (content.includes('Prime Minister')) {
+      return {
+        category: 'PMQs',
+        type: 'ORAL_QUESTIONS'
+      };
+    }
+
+    if (nextNode?.textContent.includes('Urgent Question')) {
+      return {
+        category: 'ORAL_QUESTIONS',
+        type: 'URGENT'
+      };
+    }
+
+    if (content.includes('- Question')) {
+      return {
+        category: 'LORDS_QUESTIONS',
+        type: 'QUESTIONS'
+      };
+    }
+
     if (this.inOralQuestions && !content.includes('was asked—') && 
         !content.includes('Oral Answers')) {
       this.inOralQuestions = false;
     }
 
-    for (const [category, types] of Object.entries(BUSINESS_TYPES)) {
+    for (const [category, types] of Object.entries(businessTypes)) {
       for (const [type, config] of Object.entries(types)) {
         if (config.requiresAllMarkers) {
           if (config.markers.every(marker => content.includes(marker))) {
@@ -520,12 +579,11 @@ class ParliamentaryProcessor {
 
         if (config.markers.some(marker => content.includes(marker))) {
           if (category === 'ORAL_QUESTIONS' && config.subTypes) {
-            for (const [subType, subConfig] of Object.entries(config.subTypes)) {
+            for (const [subConfig] of Object.entries(config.subTypes)) {
               if (subConfig.markers.some(marker => content.includes(marker))) {
                 return { 
                   category, 
-                  type,
-                  subType 
+                  type
                 };
               }
             }
@@ -547,12 +605,345 @@ class ParliamentaryProcessor {
       }
     }
 
-    return { category: 'OTHER', type: 'UNCLASSIFIED' };
+    // Add safety check before splitting
+    if (!content.includes('- ')) {
+      return { category: 'OTHER', type: content.replace(/\s+/g, '_').toUpperCase() };
+    }
+    
+    return { category: 'OTHER', type: `${content.split('- ')[1].replace(/\s+/g, '_').toUpperCase()}` };
   }
 
-  validateDocument(xmlDoc) {
-    if (!xmlDoc || !xmlDoc.documentElement) {
-      throw new Error('Invalid XML document');
+  processMinorHeading(node) {
+    const content = node.textContent.trim();
+    
+    if (this.inOralQuestions && this.currentBusiness?.currentDepartment) {
+      const topic = {
+        id: node.getAttribute('id'),
+        text: content,
+        questions: []
+      };
+
+      this.currentBusiness.currentDepartment.topics.push(topic);
+      this.currentBusiness.currentDepartment.currentTopic = topic;
+    } else if (this.currentBusiness) {
+      this.currentBusiness.metadata.minorHeadings = 
+        this.currentBusiness.metadata.minorHeadings || [];
+      this.currentBusiness.metadata.minorHeadings.push({
+        id: node.getAttribute('id'),
+        text: content,
+        first_speech_index: this.currentBusiness.speech_index || 0
+      });
+    }
+  }
+
+  processSpeech(node) {
+    if (!this.currentBusiness) return;
+
+    const speech = this.extractSpeech(node);
+    
+    if (this.inOralQuestions) {
+      this.processOralQuestionSpeech(speech);
+    } else {
+      this.currentBusiness.addSpeech(speech);
+    }
+
+    if (speech.speakerId) {
+      this.context.speakers.add(speech.speakerId);
+    }
+  }
+
+  extractSpeech(node) {
+    const billStage = this.extractBillStage(node);
+    const motionStatus = this.extractMotionStatus(node);
+    
+    return {
+      speakerId: node.getAttribute('person_id'),
+      speakerName: node.getAttribute('speakername'),
+      time: node.getAttribute('time'),
+      type: node.getAttribute('type'),
+      content: this.extractSpeechContent(node),
+      extracts: this.extractSpeechExtracts(node),
+      procedural: this.isProceduralSpeech(node),
+      debateRole: this.extractDebateRole(node),
+      motion: motionStatus,
+      colnum: node.getAttribute('colnum'),
+      oral_qnum: node.getAttribute('oral-qnum'),
+      bill_stage: billStage
+    };
+  }
+
+  extractMotionStatus(node) {
+    const content = node.textContent.trim();
+    
+    // Motion status patterns
+    const patterns = {
+      MOTION_PROPOSED: [
+        /^Motion made, and Question proposed/,
+        /^Motion proposed/,
+        /^I beg to move/
+      ],
+      MOTION_PUT_FORTHWITH: [
+        /^Motion made, and Question put forthwith/,
+        /^Question put forthwith/
+      ],
+      MOTION_AGREED: [
+        /^Question (?:accordingly )?agreed to(?:,)?/,
+        /^Motion (?:accordingly )?agreed to(?:,)?/,
+        /^Resolved(?:,)?/,
+        /^Ordered(?:,)?/
+      ],
+      MOTION_WITHDRAWN: [
+        /^Motion, by leave, withdrawn(?:,)?/,
+        /^Motion withdrawn(?:,)?/,
+        /^By leave, withdrawn(?:,)?/
+      ],
+      MOTION_NEGATIVED: [
+        /^Question negatived(?:,)?/,
+        /^Motion negatived(?:,)?/
+      ],
+      DIVISION_OUTCOME: [
+        /^The House divided/,
+        /^Division No\. \d+/
+      ],
+      BILL_PRESENTATION: [
+        /^Bill (?:presented|brought up)/,
+        /^(?:.*?) presented a Bill/,
+        /^Presentation Bill/
+      ],
+      BILL_READING: [
+        /^Bill read(?: the)? (?:First|Second|Third) time(?:,)?/,
+        /^(?:.*?) read(?: the)? (?:First|Second|Third) time(?:,)?/
+      ]
+    };
+
+    // Collect all matching statuses
+    const statuses = [];
+    for (const [status, statusPatterns] of Object.entries(patterns)) {
+      if (statusPatterns.some(pattern => pattern.test(content))) {
+        statuses.push(status);
+      }
+    }
+
+    // Return array of statuses, or null if none found
+    return statuses.length > 0 ? statuses : null;
+  }
+
+  extractBillStage(node) {
+    const content = node.textContent;
+    
+    // Common bill stage patterns
+    const stagePatterns = {
+      FIRST_READING: [
+        /Bill read (?:the )?First time/i,
+        /First Reading/i,
+        /presented a Bill/i,
+        /Bill presented/i,
+        /read a first time/i
+      ],
+      SECOND_READING: [
+        /Bill read (?:the )?Second time/i,
+        /read a second time/i,
+        /Second Reading/i
+      ],
+      THIRD_READING: [
+        /Bill read (?:the )?Third time/i,
+        /read a third time/i,
+        /Third Reading/i
+      ],
+      COMMITTEE: [
+        /Committee stage/i,
+        /in Committee/i
+      ],
+      REPORT: [
+        /Report stage/i,
+        /Bill reported/i
+      ],
+      CONSIDERATION: [
+        /Consideration of Bill/i,
+        /Bill considered/i
+      ],
+      ROYAL_ASSENT: [
+        /Royal Assent/i
+      ]
+    };
+
+    // Check each pattern
+    for (const [stage, patterns] of Object.entries(stagePatterns)) {
+      if (patterns.some(pattern => pattern.test(content))) {
+        return stage;
+      }
+    }
+
+    return null;
+  }
+
+  extractDebateRole(node) {
+    // Get previous sibling, skipping text nodes
+    const getPreviousElement = (node) => {
+      let previous = node.previousSibling;
+      while (previous && previous.nodeType !== 1) { // ELEMENT_NODE = 1
+        previous = previous.previousSibling;
+      }
+      return previous;
+    };
+
+    // Check current node and previous element
+    const checkForRole = (content) => {
+      // Don't extract role if this is the calling node
+      if (content.startsWith('I call')) {
+        return null;
+      }
+
+      // Check previous node for role patterns
+      const previousElement = getPreviousElement(node);
+      if (!previousElement?.textContent) return null;
+
+      // Pattern 1: "I call the [role] (name)" or "I call the [role], name"
+      const rolePattern = /I call the ([^,\(]+?)(?:,|\s+\(|$)/;
+      const match = previousElement.textContent.match(rolePattern);
+      if (match) {
+        return match[1].trim();
+      }
+
+      // Pattern 2: "I call [Name] [Name] (2-3 capitalized words)"
+      const namePattern = /I call (?!the\b)([A-Z][a-z]+(?: [A-Z][a-z]+){1,2})/;
+      const nameMatch = previousElement.textContent.match(namePattern);
+      if (nameMatch) {
+        return 'Called to Speak';
+      }
+
+      // Pattern 3: Special cases like maiden speeches
+      const maidenPattern = /I call (.*?) to make (?:his|her) maiden speech/;
+      const maidenMatch = previousElement.textContent.match(maidenPattern);
+      if (maidenMatch) {
+        return maidenMatch[1].trim();
+      }
+
+      return null;
+    };
+
+    return checkForRole(node.textContent);
+  }
+
+  extractSpeechContent(node) {
+    let content = '';
+    for (const child of node.childNodes) {
+      if (child.nodeName !== 'speech') {
+        content += child.textContent;
+      }
+    }
+    return content.trim();
+  }
+
+  extractSpeechExtracts(node) {
+    const extracts = [];
+    for (const child of node.childNodes) {
+      if (child.nodeName === 'p') {
+        const matches = child.textContent.match(/\[([^\]]+)\]/g);
+        if (matches) {
+          matches.forEach(match => extracts.push(match.slice(1, -1).trim()));
+        }
+        // Identify standing orders
+        const phrases = child.getElementsByTagName('phrase');
+        for (const phrase of phrases) {
+          if (phrase.getAttribute('class') === 'standing-order') {
+            extracts.push(phrase.textContent.trim());
+          }
+        }
+      }
+    }
+    return extracts;
+  }
+
+  isProceduralSpeech(node) {
+    if (node.getAttribute('nospeaker') === 'true') {
+      return true;
+    }
+
+    const proceduralPatterns = [
+      // Motion and Question patterns
+      /^Motion made/,
+      /^Question (?:put|agreed to)/,
+      
+      // Division patterns
+      /^Division No\. \d+/,
+      /^The House (?:divided)/,
+      
+      // Amendment patterns
+      /^Amendment (?:proposed|withdrawn|agreed to)/,
+      
+      // Order patterns
+      /^Order(?:!|\.)/,
+      /Standing Order No\. \d+/,
+      
+      // Bill patterns
+      /^Bill (?:presented|read|ordered to be|brought up)/,
+      /^(?:.*?) presented a Bill/,
+      /(?:ordered )?to be (?:printed|read)/,
+      
+      // General procedural patterns
+      /^Ordered(?:,)?/,
+      /^laid before/,
+      /^brought up and read/,
+      
+      // Speaker call patterns
+      /^I call the/,
+      /^I call [A-Z][a-zA-Z]* [A-Z][a-zA-Z]*/,
+
+    ];
+
+    const content = node.textContent.trim();
+    return proceduralPatterns.some(pattern => pattern.test(content));
+  }
+
+  processDivision(node, context) {
+    // Base implementation uses DivisionProcessor
+    return DivisionProcessor.processDivision(node, context);
+  }
+
+  shouldCreateNewBusiness(type, content) {
+    if (this.inOralQuestions && !content.includes('was asked—')) {
+      return true;
+    }
+
+    if (this.inSupermajorSection) {
+      // Only create new business if we hit another supermajor heading start
+      return this.supermajorHeadingStart(node);
+    }
+
+    if (!this.currentBusiness) return true;
+    
+    if (type.category !== this.currentBusiness.type.category) {
+      return true;
+    }
+
+    return false;
+  }
+
+  createBusinessInstance(type, metadata) {
+    return new ParliamentaryBusiness({
+      type: type
+    }, {
+      ...metadata,
+      speaker: null,
+      deputySpeaker: null,
+      divisions: [],
+    });
+  }
+
+  finalizeCurrentBusiness() {
+    if (this.currentBusiness) {
+      if (this.context.procedural.divisions.length > 0) {
+        this.currentBusiness.divisions = [...this.context.procedural.divisions];
+      }
+      if (this.context.procedural.amendments.length > 0) {
+        this.currentBusiness.amendments = [...this.context.procedural.amendments];
+      }
+
+      this.allBusiness.push(this.currentBusiness);
+      this.currentBusiness = null;
+      
+      this.context.procedural = new ProceduralContext(this);
     }
   }
 
@@ -569,69 +960,9 @@ class ParliamentaryProcessor {
     };
   }
 
-  finalizeCurrentBusiness() {
-    if (this.currentBusiness) {
-      if (this.context.procedural.divisions.length > 0) {
-        this.currentBusiness.divisions = [...this.context.procedural.divisions];
-      }
-      if (this.context.procedural.amendments.length > 0) {
-        this.currentBusiness.amendments = [...this.context.procedural.amendments];
-      }
-
-      this.allBusiness.push(this.currentBusiness);
-      this.currentBusiness = null;
-      
-      this.context.procedural = new ProceduralContext();
-    }
-  }
-
   handleError(error) {
     console.error('Error processing parliamentary business:', error);
     throw error;
-  }
-
-  shouldCreateNewBusiness(type, content) {
-    if (this.inOralQuestions && !content.includes('was asked—')) {
-      return true;
-    }
-
-    if (!this.currentBusiness) return true;
-    
-    if (type.category !== this.currentBusiness.type.category || 
-        type.type !== this.currentBusiness.type.type) {
-      return true;
-    }
-
-    const typeConfig = BUSINESS_TYPES[type.category]?.[type.type];
-    if (typeConfig?.markers.some(marker => content.includes(marker))) {
-      return true;
-    }
-
-    return false;
-  }
-
-  extractSpeechContent(node) {
-    let content = '';
-    for (const child of node.childNodes) {
-      if (child.nodeName !== 'speech') {
-        content += child.textContent;
-      }
-    }
-    return content.trim();
-  }
-
-  isProceduralSpeech(node) {
-    const proceduralMarkers = [
-      'Motion made',
-      'Question put',
-      'Question agreed to',
-      'Division',
-      'Amendment proposed',
-      'Amendment withdrawn',
-      'Amendment agreed to',
-      'Point of Order'
-    ];
-    return proceduralMarkers.some(marker => node.textContent.includes(marker));
   }
 
   countTotalSpeeches() {
@@ -657,214 +988,107 @@ class ParliamentaryProcessor {
     }, 0);
   }
 
-  processMinorHeading(node) {
-    const content = node.textContent.trim();
+  processOralQuestionSpeech(speech) {
+    if (!this.currentBusiness?.currentDepartment) return;
+
+    const department = this.currentBusiness.currentDepartment;
     
-    if (this.inOralQuestions && this.currentBusiness?.currentDepartment) {
-      const topic = {
-        id: node.getAttribute('id'),
-        text: content,
-        questions: []
+    // Handle question numbers
+    if (speech.oral_qnum) {
+      // Start a new question group
+      department.currentGroup = {
+        number: speech.oral_qnum,
+        mainQuestion: speech,
+        answers: [],
+        supplementaries: []
       };
-      
-      const topicMeta = {
-        id: node.getAttribute('id'),
-        text: content
-      };
-      
-      const deptMeta = this.currentBusiness.metadata.departments.find(
-        d => d.id === this.currentBusiness.currentDepartment.id
-      );
-      if (deptMeta) {
-        deptMeta.topics.push(topicMeta);
-      }
-
-      this.currentBusiness.currentDepartment.topics.push(topic);
-      this.currentBusiness.currentDepartment.currentTopic = topic;
-    } else if (this.currentBusiness) {
-      this.currentBusiness.metadata.minorHeadings = 
-        this.currentBusiness.metadata.minorHeadings || [];
-      this.currentBusiness.metadata.minorHeadings.push({
-        id: node.getAttribute('id'),
-        text: content
-      });
-    }
-  }
-
-  isMotionSpeech(node) {
-    const motionIndicators = [
-      'I beg to move',
-      'moved,',
-      'That this House'
-    ];
-    return motionIndicators.some(indicator => 
-      node.textContent.includes(indicator)
-    );
-  }
-
-  extractMotionText(node) {
-    const text = [];
-    let currentNode = node;
-    
-    // Look for motion text in the current and subsequent paragraphs
-    while (currentNode) {
-      if (currentNode.nodeName === 'p') {
-        const content = currentNode.textContent.trim();
-        if (content.startsWith('That') || text.length > 0) {
-          text.push(content);
+      department.questions.push(department.currentGroup);
+    } else if (department.currentGroup) {
+      // Check if this is an answer or supplementary
+      if (this.isMinisterSpeech(speech)) {
+        if (department.currentGroup.answers.length === 0) {
+          // This is the main answer
+          department.currentGroup.answers.push(speech);
+        } else {
+          // This is a supplementary answer
+          if (department.currentGroup.supplementaries.length === 0 ||
+              department.currentGroup.supplementaries[department.currentGroup.supplementaries.length - 1].answer) {
+            // Start new supplementary pair
+            department.currentGroup.supplementaries.push({ question: null, answer: speech });
+          } else {
+            // Complete current supplementary pair
+            department.currentGroup.supplementaries[department.currentGroup.supplementaries.length - 1].answer = speech;
+          }
         }
-        // Stop if we hit another speech or heading
-        if (currentNode.nextSibling?.nodeName === 'speech' || 
-            currentNode.nextSibling?.nodeName.includes('heading')) {
-          break;
+      } else {
+        // This is a supplementary question
+        if (department.currentGroup.supplementaries.length === 0 ||
+            department.currentGroup.supplementaries[department.currentGroup.supplementaries.length - 1].answer) {
+          // Start new supplementary pair
+          department.currentGroup.supplementaries.push({ question: speech, answer: null });
+        } else {
+          // Update current supplementary question
+          department.currentGroup.supplementaries[department.currentGroup.supplementaries.length - 1].question = speech;
         }
       }
-      currentNode = currentNode.nextSibling;
     }
-    
-    return text;
-  }
-}
 
-// Utility functions
-function extractReferences(node) {
-  if (node.nodeType !== 1) return [];  // Skip if not element node
-  
-  const references = [];
-  const links = node.getElementsByTagName('phrase');
-  Array.from(links).forEach(link => {
-    const className = link.getAttribute('class');
-    if (className === 'standing-order' || className === 'date') {
-      references.push({
-        type: className,
-        code: link.getAttribute('code'),
-        text: link.textContent
-      });
+    // Add to general speeches collection
+    this.currentBusiness.addSpeech(speech);
+  }
+
+  isMinisterSpeech(speech) {
+    // Implement your logic to determine if a speech is a minister's speech here
+    // For example, you can check the speaker's name or any other criteria
+    return false;
+  }
+
+  processRoyalAssent(node) {
+    // Find the following speech node
+    let nextNode = node.nextSibling;
+    while (nextNode && nextNode.nodeType !== 1) {
+      nextNode = nextNode.nextSibling;
     }
-  });
-  return references;
-}
 
-function calculateDuration(start, end) {
-  const startTime = new Date(`1970-01-01T${start}`);
-  const endTime = new Date(`1970-01-01T${end}`);
-  return (endTime - startTime) / 1000 / 60; // Duration in minutes
-}
-
-class EnhancedParliamentaryProcessor extends ParliamentaryProcessor {
-  constructor(config = {}) {
-    super(config);
-    this.speakerStatements = [];
-    this.currentDate = null;
-    this.pendingDepartment = null; // Track department from oral-heading/major-heading sequence
-  }
-
-  processOralHeading(node) {
-    const type = this.determineBusinessType(node);
-    this.finalizeCurrentBusiness();
-    
-    this.pendingDepartment = {
-      type: type,
-      metadata: {
-        id: node.getAttribute('id'),
-        title: node.textContent.trim()
-      }
-    };
-  }
-
-  processMajorHeading(node) {
-    const content = node.textContent.trim();
-    
-    if (this.pendingDepartment) {
-      const department = content;
-      const type = {
-        ...this.pendingDepartment.type,
-        department: department
-      };
+    if (nextNode && nextNode.nodeName === 'speech') {
+      const bills = [];
       
-      this.currentBusiness = this.createBusinessInstance(type, {
-        ...this.pendingDepartment.metadata,
-        subtitle: department
-      });
-
-      const nextNode = node.nextElementSibling;
-      if (nextNode && nextNode.nodeName === 'speech' && 
-          nextNode.textContent.includes('was asked—')) {
-        const ministerMatch = nextNode.textContent.match(/The (.+?) was asked/);
-        if (ministerMatch) {
-          this.currentBusiness.minister = ministerMatch[1].trim();
+      // Process each paragraph in the speech
+      for (const child of nextNode.childNodes) {
+        if (child.nodeName === 'p') {
+          const text = child.textContent.trim();
+          
+          // Skip notification paragraphs
+          if (text.includes('Royal Assent Act') || 
+              text.includes('following Acts were given') ||
+              text.includes('I have to notify')) {
+            continue;
+          }
+          
+          // Remove trailing comma and clean up text
+          const cleanedText = text.replace(/,\s*$/, '').trim();
+          
+          // Only add if there's actual content
+          if (cleanedText) {
+            bills.push({
+              name: cleanedText,
+              time: node.getAttribute('time') || null
+            });
+          }
         }
       }
 
-      this.pendingDepartment = null;
-      return;
-    }
-
-    const type = this.determineBusinessType(node);
-    if (this.shouldCreateNewBusiness(type, content)) {
-      this.finalizeCurrentBusiness();
-      this.currentBusiness = this.createBusinessInstance(type, {
-        id: node.getAttribute('id'),
-        title: content
-      });
-    } else if (this.currentBusiness) {
-      this.currentBusiness.metadata.subtitle = content;
+      // Add bills to metadata
+      this.metadata.royalAssent.push(...bills);
     }
   }
 
-  determineBusinessType(node) {
-    const content = node.textContent.trim().replace(/\s+/g, ' ');
-    
-    if (content.includes('Oral Answers to Questions')) {
-      return {
-        category: 'ORAL_QUESTIONS',
-        type: 'DEPARTMENTAL',
-        department: null // Will be filled in by major-heading
-      };
-    }
-
-    if (content.includes('Prime Minister') && 
-        (content.includes('was asked—') || content.includes('Engagements'))) {
-      return { category: 'ORAL_QUESTIONS', type: 'PMQs' };
-    }
-
-    if (content.includes("Speaker's Statement")) {
-      return { category: 'STATEMENTS', type: 'SPEAKER' };
-    }
-
-    return super.determineBusinessType(node);
-  }
-
-  createBusinessInstance(type, metadata) {
-    if (type.category === 'ORAL_QUESTIONS') {
-      switch (type.type) {
-        case 'DEPARTMENTAL':
-          return new QuestionTimeSection({
-            category: 'ORAL_QUESTIONS',
-            type: 'DEPARTMENTAL',
-            department: type.department
-          }, {
-            ...metadata,
-            minister: type.minister || null
-          });
-        case 'PMQs':
-          return new PMQsSection(metadata);
-      }
-    }
-
-    if (type.category === 'STATEMENTS' && type.type === 'SPEAKER') {
-      return new SpeakersStatement(metadata);
-    }
-
-    return new ParliamentaryBusiness(type, metadata);
-  }
-
-  shouldCreateNewBusiness(type, content) {
-    if (this.pendingDepartment) {
-      return false;
-    }
-
-    return super.shouldCreateNewBusiness(type, content);
+  isPartOfSupermajorSection(content) {
+    // Helper to determine if this heading is part of an ongoing supermajor section
+    return content.includes('Ways and Means') ||
+           content.includes('Budget Resolutions') ||
+           content.includes('Business without Debate') ||
+           content.includes('Delegated Legislation');
   }
 }
 
@@ -875,125 +1099,93 @@ class QuestionTimeSection extends ParliamentaryBusiness {
     this.currentDepartment = null;
     this.metadata.departments = [];
     this.speeches = [];
-    this.questionGroups = [];
-  }
-
-  addSpeech(speech) {
-    // Do nothing - speeches are handled by processOralQuestionSpeech
-  }
-
-  processSpeech(speech) {
-    if (speech.type === 'Start Question') {
-      const questionText = speech.content.trim();
-      if (!this.groupedQuestions.has(questionText)) {
-        this.groupedQuestions.set(questionText, []);
-      }
-      this.currentGroupedQuestionId = questionText;
-      this.groupedQuestions.get(questionText).push(speech);
-    }
-
-    super.processSpeech(speech);
+    this.speech_index = 0; // Add speech index counter
   }
 }
 
 class DivisionProcessor {
-  constructor() {
-    this.currentDivision = null;
-    this.divisions = [];
-  }
-
-  processDivision(node) {
-    if (node.nodeName !== 'division') return;
-
-    this.currentDivision = {
+  static processDivision(node, { title = null, speech_index = null } = {}) {
+    if (node.nodeName !== 'division') return null;
+    return {
       id: node.getAttribute('id'),
       date: node.getAttribute('divdate'),
       number: node.getAttribute('divnumber'),
       time: node.getAttribute('time'),
-      counts: this.extractCounts(node),
-      votes: {
-        ayes: [],
-        noes: [],
-        tellers: {
-          ayes: [],
-          noes: []
-        }
+      counts: DivisionProcessor.extractCounts(node),
+      votes: DivisionProcessor.extractVotes(node),
+      outcome: DivisionProcessor.extractOutcome(node),
+      debate: {
+        title: title,
+        speech_index: speech_index
       }
     };
-
-    const ayesList = node.querySelector('mplist[vote="aye"]');
-    const noesList = node.querySelector('mplist[vote="no"]');
-
-    if (ayesList) this.processVoteList(ayesList, 'ayes');
-    if (noesList) this.processVoteList(noesList, 'noes');
-
-    this.divisions.push(this.currentDivision);
   }
 
-  extractCounts(node) {
-    const countNode = node.querySelector('divisioncount');
-    if (countNode) {
-      return {
-        ayes: parseInt(countNode.getAttribute('ayes')),
-        noes: parseInt(countNode.getAttribute('noes'))
-      };
+  static extractCounts(node) {
+    for (const child of node.childNodes) {
+      if (child.nodeName === 'divisioncount') {
+        return {
+          ayes: parseInt(child.getAttribute('ayes')),
+          noes: parseInt(child.getAttribute('noes'))
+        };
+      }
     }
     return null;
   }
 
-  processVoteList(listNode, type) {
-    const votes = Array.from(listNode.getElementsByTagName('mpname'));
-    
-    votes.forEach(vote => {
-      const voteRecord = {
-        memberId: vote.getAttribute('person_id'),
-        name: vote.textContent.trim(),
-        isTeller: vote.getAttribute('teller') === 'yes'
-      };
+  static extractVotes(node) {
+    const votes = {
+      ayes: [],
+      noes: [],
+      tellers: { ayes: [], noes: [] }
+    };
 
-      if (voteRecord.isTeller) {
-        this.currentDivision.votes.tellers[type].push(voteRecord);
-      } else {
-        this.currentDivision.votes[type].push(voteRecord);
+    for (const child of node.childNodes) {
+      if (child.nodeName === 'mplist') {
+        const voteType = child.getAttribute('vote');
+        const voteKey = voteType === 'aye' ? 'ayes' : 
+                       voteType === 'no' ? 'noes' : null;
+                       
+        if (!voteKey) continue;
+
+        for (const mp of child.childNodes) {
+          if (mp.nodeName === 'mpname') {
+            const vote = {
+              memberId: mp.getAttribute('person_id'),
+              name: mp.textContent.trim(),
+              proxy: mp.getAttribute('proxy')
+            };
+            
+            const isTeller = mp.getAttribute('teller') === 'yes';
+            if (isTeller) {
+              votes.tellers[voteKey].push(vote);
+            } else {
+              votes[voteKey].push(vote);
+            }
+          }
+        }
       }
-    });
-  }
-}
-
-// Update the ProceduralContext to use the new division processor
-class EnhancedProceduralContext extends ProceduralContext {
-  constructor() {
-    super();
-    this.divisionProcessor = new DivisionProcessor();
-  }
-
-  updateContext(node) {
-    super.updateContext(node);
-    
-    if (node.nodeName === 'division') {
-      this.divisionProcessor.processDivision(node);
     }
+
+    return votes;
   }
 
-  getDivisionStats() {
-    return this.divisionProcessor.divisions.map(division => ({
-      id: division.id,
-      number: division.number,
-      result: division.counts.ayes > division.counts.noes ? 'PASSED' : 'REJECTED',
-      counts: division.counts,
-      participation: division.counts.ayes + division.counts.noes,
-      margin: Math.abs(division.counts.ayes - division.counts.noes),
-      tellerCount: division.votes.tellers.ayes.length + division.votes.tellers.noes.length
-    }));
+  static extractOutcome(node) {
+    const counts = DivisionProcessor.extractCounts(node);
+    if (!counts) return null;
+
+    return {
+      result: counts.ayes > counts.noes ? 'AGREED' : 'NEGATIVED',
+      majority: Math.abs(counts.ayes - counts.noes),
+      tied: counts.ayes === counts.noes
+    };
   }
 }
-
 module.exports = {
-  EnhancedParliamentaryProcessor,
   ParliamentaryBusiness,
   QuestionTimeSection,
-  EnhancedProceduralContext,
   ParliamentaryProcessor,
-  BUSINESS_TYPES,
-  SpeechGroup
+  ParliamentaryContext,
+  BUSINESS_TYPES  
 };
+

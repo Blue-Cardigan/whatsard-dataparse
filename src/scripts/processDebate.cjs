@@ -1,26 +1,34 @@
 const axios = require('axios');
 const { DOMParser } = require('@xmldom/xmldom');
 const { ParliamentaryProcessor } = require('./parseCommons.cjs');
-const { LordsParliamentaryProcessor } = require('./parseLords.cjs');
+const { LordsProcessor } = require('./parseLords.cjs');
+const { WestminsterHallProcessor } = require('./parseWestminster.cjs');
 const fs = require('fs').promises;
 const path = require('path');
 require('dotenv').config();
-
-const BROWSER_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-};
+const { processDate: processCommittee } = require('./processCommittee.cjs');
 
 async function fetchDebateXML(dateString, type = 'commons') {
-  const baseUrl = type === 'lords'
-    ? `https://www.theyworkforyou.com/pwdata/scrapedxml/lordspages/daylord${dateString}`
-    : `https://www.theyworkforyou.com/pwdata/scrapedxml/debates/debates${dateString}`;
+  const baseUrls = {
+    commons: `https://www.theyworkforyou.com/pwdata/scrapedxml/debates/debates${dateString}`,
+    lords: `https://www.theyworkforyou.com/pwdata/scrapedxml/lordspages/daylord${dateString}`,
+    westminster: `https://www.theyworkforyou.com/pwdata/scrapedxml/westminhall/westminster${dateString}`,
+    committee: null // Committees use a different fetch mechanism
+  };
+
+  const baseUrl = baseUrls[type];
+  if (type === 'committee') {
+    return null; // Committee XML is fetched differently
+  }
+  if (!baseUrl) {
+    throw new Error(`Invalid debate type: ${type}`);
+  }
 
   // Try suffixes h through a in reverse order
   for (const suffix of ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a']) {
     const url = `${baseUrl}${suffix}.xml`;
     try {
-      const response = await axios.get(url, { headers: BROWSER_HEADERS });
+      const response = await axios.get(url);
       console.log(`Found data with suffix: ${suffix}`);
       return response.data;
     } catch (error) {
@@ -33,8 +41,14 @@ async function fetchDebateXML(dateString, type = 'commons') {
   return null;
 }
 
-async function processDebate(dateString, type = 'commons') {
+async function processDebate(dateString, type = 'commons', mode = 'full') {
   try {
+    // Special handling for committees
+    if (type === 'committee') {
+      const result = await processCommittee(dateString);
+      return mode === 'skeleton' ? createSkeleton(result) : result;
+    }
+
     const xmlData = await fetchDebateXML(dateString, type);
     if (!xmlData) {
       console.log(`No data found for ${type} on ${dateString}`);
@@ -44,15 +58,26 @@ async function processDebate(dateString, type = 'commons') {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlData, 'text/xml');
     
-    const processor = type === 'lords'
-      ? new LordsParliamentaryProcessor({
-          date: dateString,
-          includeInterventions: true
-        })
-      : new ParliamentaryProcessor({
+    let processor;
+    switch(type) {
+      case 'lords':
+        processor = new LordsProcessor({
           date: dateString,
           includeInterventions: true
         });
+        break;
+      case 'westminster':
+        processor = new WestminsterHallProcessor({
+          date: dateString,
+          includeInterventions: true
+        });
+        break;
+      default:
+        processor = new ParliamentaryProcessor({
+          date: dateString,
+          includeInterventions: true
+        });
+    }
 
     const result = processor.process(xmlDoc);
     
@@ -61,22 +86,42 @@ async function processDebate(dateString, type = 'commons') {
       return null;
     }
 
-    return {
+    const fullResult = {
       date: dateString,
-      type: type,
+      house: type,
       business: result.business,
       metadata: {
         ...result.metadata,
         processingDate: new Date().toISOString()
       }
     };
+
+    return mode === 'skeleton' ? createSkeleton(fullResult) : fullResult;
   } catch (error) {
     console.error(`Error processing ${type} debate:`, error);
     throw error;
   }
 }
 
-async function processDebatesForPeriod(startDate, numberOfDays = 1, types = ['commons']) {
+function createSkeleton(obj) {
+  if (Array.isArray(obj)) {
+    // Special handling for speeches array - only return one example
+    if (obj.length > 0 && obj[0]?.speakerId !== undefined) {
+      return [createSkeleton(obj[0])];
+    }
+    // For other arrays, keep up to 3 items as examples
+    return obj.slice(0, 3).map(item => createSkeleton(item));
+  } else if (obj && typeof obj === 'object') {
+    const skeleton = {};
+    for (const key in obj) {
+      skeleton[key] = createSkeleton(obj[key]);
+    }
+    return skeleton;
+  }
+  return null;
+}
+
+async function processDebatesForPeriod(startDate, numberOfDays = 1, types = ['commons', 'lords', 'westminster'], mode = 'full') {
   const results = {};
   const date = new Date(startDate);
 
@@ -91,7 +136,7 @@ async function processDebatesForPeriod(startDate, numberOfDays = 1, types = ['co
     for (const type of types) {
       console.log(`- Processing ${type}...`);
       try {
-        const result = await processDebate(dateString, type);
+        const result = await processDebate(dateString, type, mode);
         if (result) {
           if (!results[dateString]) {
             results[dateString] = {};
@@ -99,7 +144,10 @@ async function processDebatesForPeriod(startDate, numberOfDays = 1, types = ['co
           results[dateString][type] = result;
 
           // Save to file
-          const fileName = `${dateString}-${type}.json`;
+          let fileName = `${dateString}-${type}.json`;
+          if (mode === 'skeleton') {
+            fileName = `${fileName.split('.')[0]}-skeleton.json`;
+          }
           const filePath = path.join(outputDir, fileName);
           await fs.writeFile(filePath, JSON.stringify(result, null, 2));
           console.log(`  Saved to ${filePath}`);
@@ -126,25 +174,28 @@ if (require.main === module) {
 
   let numberOfDays = 1;
   let types = [];
+  let mode = 'full';
 
   // Parse arguments
   const args = process.argv.slice(3);
   args.forEach(arg => {
     if (!isNaN(arg)) {
       numberOfDays = parseInt(arg);
-    } else if (['commons', 'lords'].includes(arg)) {
+    } else if (['commons', 'lords', 'westminster', 'committee'].includes(arg)) {
       if (!types.includes(arg)) {
         types.push(arg);
       }
+    } else if (arg === 'skeleton') {
+      mode = 'skeleton';
     }
   });
 
-  // If no types specified, default to commons
+  // If no types specified, default to all four
   if (types.length === 0) {
-    types = ['commons'];
+    types = ['commons', 'lords', 'westminster', 'committee'];
   }
   
-  processDebatesForPeriod(date, numberOfDays, types)
+  processDebatesForPeriod(date, numberOfDays, types, mode)
     .then(results => {
       if (results) {
         console.log('Successfully processed debates for all specified dates');
