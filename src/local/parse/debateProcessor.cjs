@@ -2,12 +2,11 @@ const moment = require('moment');
 
 function createDebateProcessor(debateType) {
   let debateCounter = 0;
-  let heldDebate = null;
   let committeeInfo = null;
   let divisionCounts = [];
   let hasMinorHeading = false;
 
-  function createDebate(id, title, type) {
+  function createDebate(id, title, subtitle) {
     debateCounter++;
     let debateId;
     if (id) {
@@ -29,7 +28,7 @@ function createDebateProcessor(debateType) {
     return {
       id: debateId,
       title,
-      type,
+      subtitle,
       speaker_ids: new Set(),
       speaker_names: new Set(),
       speeches: []

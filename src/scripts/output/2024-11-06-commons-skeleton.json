@@ -1,0 +1,124 @@
+{
+  "date": null,
+  "house": null,
+  "business": [
+    {
+      "type": {
+        "category": null,
+        "type": null
+      },
+      "metadata": {
+        "id": null,
+        "title": null,
+        "departments": [],
+        "supermajorHeading": []
+      },
+      "procedural": [],
+      "references": [],
+      "speeches": [],
+      "speech_index": null
+    },
+    {
+      "type": {
+        "category": null,
+        "type": null
+      },
+      "metadata": {
+        "id": null,
+        "title": null,
+        "supermajorHeading": [
+          null
+        ],
+        "minorHeadings": [
+          {
+            "id": null,
+            "text": null,
+            "first_speech_index": null
+          },
+          {
+            "id": null,
+            "text": null,
+            "first_speech_index": null
+          },
+          {
+            "id": null,
+            "text": null,
+            "first_speech_index": null
+          }
+        ]
+      },
+      "procedural": [],
+      "references": [],
+      "speeches": [
+        {
+          "speakerId": null,
+          "speakerName": null,
+          "time": null,
+          "type": null,
+          "content": null,
+          "extracts": [],
+          "procedural": null,
+          "debateRole": null,
+          "motion": null,
+          "colnum": null,
+          "oral_qnum": null,
+          "bill_stage": null,
+          "index": null
+        }
+      ],
+      "speech_index": null
+    },
+    {
+      "type": {
+        "type": {
+          "category": null,
+          "type": null
+        }
+      },
+      "metadata": {
+        "id": null,
+        "title": null,
+        "supermajorHeading": [
+          null
+        ],
+        "speaker": null,
+        "deputySpeaker": null,
+        "divisions": [],
+        "minorHeadings": [
+          {
+            "id": null,
+            "text": null,
+            "first_speech_index": null
+          }
+        ]
+      },
+      "procedural": [],
+      "references": [],
+      "speeches": [
+        {
+          "speakerId": null,
+          "speakerName": null,
+          "time": null,
+          "type": null,
+          "content": null,
+          "extracts": [],
+          "procedural": null,
+          "debateRole": null,
+          "motion": null,
+          "colnum": null,
+          "oral_qnum": null,
+          "bill_stage": null,
+          "index": null
+        }
+      ],
+      "speech_index": null
+    }
+  ],
+  "metadata": {
+    "totalSpeeches": null,
+    "uniqueSpeakers": null,
+    "duration": null,
+    "divisions": [],
+    "processingDate": null
+  }
+}

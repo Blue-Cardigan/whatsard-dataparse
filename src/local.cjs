@@ -129,13 +129,28 @@ function runScript(scriptName, args) {
   });
 }
 
+async function checkPreviousBatchStatus(startDate) {
+  const { data, error } = await supabase
+    .from('batch_status')
+    .select('*')
+    .eq('start_date', startDate)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error('Error checking batch status:', error);
+    return null;
+  }
+
+  return data?.[0] || null;
+}
+
 async function main() {
   try {
-    // Set the start date to the day after the most recent date in the database
     params.startDate = await getMostRecentDate();
-
     console.log(`Processing from date: ${params.startDate} to ${params.endDate}`);
 
+    // Run parse process first
     console.log('Starting parse process...');
     const parseOutput = await runScript('local/parse.cjs', [
       `startDate=${params.startDate}`,
@@ -143,22 +158,36 @@ async function main() {
       `debateType=${params.debateType}`
     ]);
 
-    // Check if any debates were retrieved
     const debatesRetrieved = parseOutput.includes('successfully stored in Supabase');
+    if (!debatesRetrieved) {
+      console.log('No debates retrieved. Skipping generate process.');
+      return;
+    }
 
-    if (debatesRetrieved) {
-      console.log('Starting generate process...');
+    // Check previous batch status
+    const previousBatch = await checkPreviousBatchStatus(params.startDate);
+    const useChatProcessor = previousBatch?.status === 'in_progress';
+
+    if (useChatProcessor) {
+      console.log('Previous batch still in progress. Using chat processor...');
+      await runScript('local/generate.cjs', [
+        `startDate=${params.startDate}`,
+        `endDate=${params.endDate}`,
+        `debateType=${params.debateType}`,
+        `batchSize=${params.batchSize}`,
+        'processor=chat'
+      ]);
+    } else {
+      console.log('Starting batch processor...');
       await runScript('local/generate.cjs', [
         `startDate=${params.startDate}`,
         `endDate=${params.endDate}`,
         `debateType=${params.debateType}`,
         `batchSize=${params.batchSize}`
       ]);
-
-      console.log('All processes completed successfully.');
-    } else {
-      console.log('No debates retrieved. Skipping generate process.');
     }
+
+    console.log('All processes completed successfully.');
   } catch (error) {
     console.error('An error occurred:', error);
     process.exit(1);

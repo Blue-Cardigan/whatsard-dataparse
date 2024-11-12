@@ -9,7 +9,7 @@ const { processXML: processLordsXML } = require('./parse/parsexml/lords.cjs');
 const { processXML: processWestminsterXML } = require('./parse/parsexml/westminster.cjs');
 const { processXML: processPublicBillsXML } = require('./parse/parsexml/publicbills.cjs');
 const { fetchXMLData } = require('./parse/fetchxml.cjs');
-const { format, addDays, parse, isAfter, isBefore, isValid } = require('date-fns');
+const { format, addDays, parse, isAfter, isValid } = require('date-fns');
 const { generateExtracts } = require('./parse/extracts.cjs');
 
 const supabaseUrl = process.env.DATABASE_URL;
@@ -31,19 +31,7 @@ function initSupabase(supabaseUrl, supabaseServiceKey) {
   }
 }
 
-//rename debate.type to debate.subtitle
-function renameTypeToSubtitle(debates) {
-  return debates.map(debate => {
-    const newDebate = { ...debate };
-    newDebate.subtitle = newDebate.type;
-    delete newDebate.type;
-    return newDebate;
-  });
-}
-
-
 function adjustDebateTypes(debates) {
-  debates = renameTypeToSubtitle(debates);
   let currentSubtitle = '';
   let currentPrepend = '';
   let isFirstRow = true;
@@ -78,9 +66,19 @@ function categoriseDebate(debate, debateType) {
     if (debate.title && debate.title.startsWith('Petition - ')) {
       return 'Petitions';
     }
-    if ((debate.speeches && debate.speeches.length === 1) || 
-        (debate.speaker_ids && debate.speaker_ids.length === 1)) {
-      return 'Administration';
+    if (debate.speeches && debate.speeches.length === 1) {
+      if (debate.subtitle && (debate.subtitle.includes('Bill Presented') || debate.subtitle.includes('Bills Presented'))) {
+        return 'Bill Presented';
+      }
+      if (debate.subtitle && debate.subtitle.includes('Bill')) {
+        return 'Bills & Legislation';
+      }
+      if (debate.subtitle && debate.subtitle.includes('Delegated Legislation')) {
+        return 'Delegated Legislation';
+      }
+      if ((debate.speaker_ids && debate.speaker_ids.length === 1)) {
+        return 'Procedural';
+      }
     }
   }
 
@@ -88,8 +86,11 @@ function categoriseDebate(debate, debateType) {
     if (debate.title && (debate.title.includes('Bill') || debate.title.toLowerCase().includes('royal assent') || debate.title.includes('Act'))) {
       return 'Bills & Legislation';
     }
-    if (debate.title && ['Point of Order', 'Prayers', 'Business of the House'].some(phrase => debate.title.includes(phrase))) {
-      return 'Administration';
+    if (debate.title && ['Point of Order', 'Prayers', 'Business of the House', 'Speaker\'s Statement'].some(phrase => debate.title.includes(phrase))) {
+      return 'Procedural';
+    }
+    if (debate.subtitle && debate.subtitle.includes('Urgent Question')) {
+      return 'Urgent Question';
     }
     if (debate.subtitle && debate.subtitle.includes('was asked—')) {
       return 'Oral Answers to Questions';
@@ -114,7 +115,7 @@ function categoriseDebate(debate, debateType) {
     }
   }
 
-  return 'Main';
+  return 'Main Debates';
 }
 
 async function storeDataInSupabase(debates, debateType) {
@@ -126,8 +127,8 @@ async function storeDataInSupabase(debates, debateType) {
 
   const adjustedDebates = adjustDebateTypes(debates);
 
-  // Filter out debates where both title and type are NULL
-  const validDebates = adjustedDebates.filter(debate => debate.title != '' || debate.type != '');
+  // Filter out debates where both title and subtitle are NULL
+  const validDebates = adjustedDebates.filter(debate => debate.title != '' || debate.subtitle != '' || debate.speeches != '');
 
   // Remove speeches with null content
   const cleanedDebates = validDebates.map(debate => ({

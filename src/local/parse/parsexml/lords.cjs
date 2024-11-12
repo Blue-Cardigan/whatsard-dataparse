@@ -8,7 +8,7 @@ function processLordsXML(xmlString) {
   const { createDebate, addSpeech, finalizeDebates } = createDebateProcessor('lords');
   const debates = [];
   let currentDebate = null;
-  let currentType = '';
+  let currentSubtitle = '';
   let lastMajorHeadingId = null;
 
   function finalizeCurrentDebate() {
@@ -25,30 +25,16 @@ function processLordsXML(xmlString) {
         let headingContent = '';
         let headingType = '';
         
-        // Remove the [HL] tag if it exists
-        const hlMatch = node.textContent.match(/\[HL\]/);
-        if (hlMatch) {
-          headingContent += ' ' + hlMatch[0].trim();
-        }
         
-        headingContent = node.textContent.split(' -')[0].trim();
-        
-        const italicTag = node.getElementsByTagName('i')[0];
-        if (italicTag) {
-          headingType = italicTag.textContent.trim();
-        }
-        
-        headingContent = headingContent.replace(/[^\w\s\[\]]+$/, '').trim();
-        
-        currentType = headingType || headingContent;
+        currentSubtitle = headingType || headingContent;
         
         lastMajorHeadingId = node.getAttribute('id')?.split('/').pop() || `major_${debates.length + 1}`;
-        currentDebate = createDebate(lastMajorHeadingId, headingContent, currentType);
+        currentDebate = createDebate(lastMajorHeadingId, headingContent, currentSubtitle);
         break;
 
       case 'speech':
         if (!currentDebate) {
-          currentDebate = createDebate(lastMajorHeadingId, currentType, currentType);
+          currentDebate = createDebate(lastMajorHeadingId, currentSubtitle, currentSubtitle);
         }
         const speakerId = node.getAttribute('person_id')?.split('/').pop() || null;
         const speakerName = node.getAttribute('speakername') || 'No Name';
@@ -63,7 +49,7 @@ function processLordsXML(xmlString) {
         finalizeCurrentDebate();
         const id = node.getAttribute('id')?.split('/').pop() || `minor_${debates.length + 1}`;
         const title = node.textContent.trim();
-        currentDebate = createDebate(id, title, currentType);
+        currentDebate = createDebate(id, title, currentSubtitle);
         break;
     }
 

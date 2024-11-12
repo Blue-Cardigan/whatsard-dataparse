@@ -16,16 +16,21 @@
     "@supabase/supabase-js": "^2.45.1"
   },
   "dependencies": {
+    "@xmldom/xmldom": "^0.9.5",
+    "american-british-english-translator": "^0.2.1",
     "axios": "^1.7.4",
     "cheerio": "^1.0.0",
     "csv-parser": "^3.0.0",
     "date-fns": "^3.6.0",
+    "dayjs": "^1.11.13",
     "define-property": "^2.0.2",
     "dotenv": "^16.4.5",
     "json-schema-to-zod": "^2.4.1",
     "moment": "^2.30.1",
+    "node-fetch": "^3.3.2",
     "openai": "^4.57.1",
     "xmldom": "^0.6.0",
+    "yargs": "^17.7.2",
     "zod": "^3.23.8"
   }
 }

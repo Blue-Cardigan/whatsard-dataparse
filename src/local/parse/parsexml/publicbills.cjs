@@ -8,7 +8,7 @@ function processPublicBillsXML(xmlString) {
   const { createDebate, addSpeech, finalizeDebates, setCommitteeInfo, addDivisionCount, setHasMinorHeading } = createDebateProcessor('publicbills');
   const debates = [];
   let currentDebate = null;
-  let currentType = '';
+  let currentSubtitle = '';
   let firstSpeechId = null;
   let hasMinorHeading = false;
 
@@ -35,7 +35,7 @@ function processPublicBillsXML(xmlString) {
   function processNode(node) {
     switch (node.nodeName) {
       case 'bill':
-        currentType = node.textContent.trim();
+        currentSubtitle = node.textContent.trim();
         break;
 
       case 'committee':
@@ -72,7 +72,7 @@ function processPublicBillsXML(xmlString) {
         setHasMinorHeading();
         finalizeCurrentDebate();
         const headingId = processPublicBillId(node.getAttribute('id')?.split('/').pop());
-        currentDebate = createDebate(headingId, node.textContent.trim(), currentType);
+        currentDebate = createDebate(headingId, node.textContent.trim(), currentSubtitle);
         break;
 
       case 'speech':
@@ -81,7 +81,7 @@ function processPublicBillsXML(xmlString) {
         }
         if (!currentDebate) {
           const speechId = firstSpeechId || `speech_${debates.length + 1}`;
-          currentDebate = createDebate(speechId, currentType || "No Title", currentType || "No Type");
+          currentDebate = createDebate(speechId, currentSubtitle || "No Title", currentSubtitle || "No Type");
         }
         const speakerId = node.getAttribute('person_id')?.split('/').pop() || null;
         const speakerName = node.getAttribute('speakername') || 'No Name';
